@@ -72,6 +72,14 @@ NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/batches
 Worker-only optional tuning: `RENDER_CONCURRENCY`, `PROBE_CONCURRENCY`,
 `FONT_PATH` (see below).
 
+> **`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is baked in at *build* time.** It's a
+> client-side variable inlined into the browser bundle when `next build` runs.
+> The build itself now succeeds without it (all routes are dynamic), but the web
+> app can't authenticate until it's rebuilt with the key present. Railway exposes
+> service variables to the build, so: set the Clerk keys on the `web` service,
+> then redeploy. The R2 and Postgres/Redis vars are only read at request time, so
+> they don't need to be present for the build.
+
 ## 5. Seed starter hooks (once)
 
 From a Railway one-off shell on the `web` service (it has `DATABASE_URL`):

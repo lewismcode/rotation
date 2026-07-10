@@ -26,6 +26,12 @@ export const metadata: Metadata = {
   description: "Drop clips, pick hooks, download ready-to-post Reels.",
 };
 
+// The whole app is authenticated and request-scoped (Clerk, per-request tenant).
+// Force dynamic rendering so nothing is statically prerendered at build time —
+// this keeps `next build` from needing the Clerk publishable key baked in, and
+// avoids prerendering pages that only make sense per-request.
+export const dynamic = "force-dynamic";
+
 // Sets data-theme before paint from the server value, else localStorage /
 // prefers-color-scheme — avoids a theme flash on load.
 const noFlashScript = `(function(){try{var el=document.documentElement;var t=el.getAttribute('data-theme');if(!t){var ls=localStorage.getItem('rotation-theme');t=ls||(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');el.setAttribute('data-theme',t);}}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();`;
