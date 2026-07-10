@@ -1,28 +1,23 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs/server";
-import { UserButton, OrganizationList } from "@clerk/nextjs";
-import { getContext } from "@/lib/context";
+import { UserButton } from "@clerk/nextjs";
+import { requireContextOrRedirect } from "@/lib/context";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 /**
  * The authenticated shell. Header reads the current label's display name (never
  * hardcoded — supports per-label branding), plus a persistent, unobtrusive
  * theme toggle top-right. No sidebar; the app is a linear, guided flow.
+ *
+ * Guarding here isn't enough on its own — layout and page render concurrently —
+ * so each page also calls requireContextOrRedirect(). Both redirect a user with
+ * no active label to /select-label rather than throwing.
  */
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
-
-  const ctx = await getContext();
-  // Signed in but no active label (organization) yet — every label IS a Clerk
-  // org, so send them to create/select one rather than looping to sign-in.
-  if (!ctx) return <OrgGate />;
-
+  const ctx = await requireContextOrRedirect();
   const isAdmin = ctx.user.role === "admin";
 
   return (
@@ -65,36 +60,6 @@ export default async function AppLayout({
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-5 py-8">{children}</main>
-    </div>
-  );
-}
-
-/**
- * Shown when a signed-in user has no active label yet. Labels are Clerk orgs, so
- * we surface Clerk's org create/select UI. Creating or picking one sets the
- * active org; the label row auto-provisions on the next request.
- */
-function OrgGate() {
-  return (
-    <div className="grid min-h-screen place-items-center bg-bg p-6">
-      <div className="flex w-full max-w-md flex-col items-center gap-8">
-        <div className="text-center">
-          <div className="mb-3 flex items-center justify-center gap-2.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-accent" />
-            <span className="font-display text-lg font-medium tracking-tight text-primary">
-              Rotation
-            </span>
-          </div>
-          <p className="text-sm text-secondary">
-            Choose your label to continue, or create one to get started.
-          </p>
-        </div>
-        <OrganizationList
-          hidePersonal
-          afterCreateOrganizationUrl="/batches"
-          afterSelectOrganizationUrl="/batches"
-        />
-      </div>
     </div>
   );
 }

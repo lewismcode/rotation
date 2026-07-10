@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { batchesRepo } from "@rotation/db";
-import { requireContext } from "@/lib/context";
+import { requireContextOrRedirect } from "@/lib/context";
 import { NewBatchButton } from "@/components/NewBatchButton";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default async function BatchesPage() {
-  const ctx = await requireContext();
+  const ctx = await requireContextOrRedirect();
   const batches = await batchesRepo.listBatches(ctx.label.id);
 
   return (

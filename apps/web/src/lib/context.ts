@@ -1,4 +1,5 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 import { cache } from "react";
 import { labelsRepo, usersRepo } from "@rotation/db";
 import type { Label, User } from "@rotation/shared";
@@ -51,6 +52,20 @@ export async function requireContext(): Promise<RequestContext> {
   const ctx = await getContext();
   if (!ctx) throw new UnauthorizedError();
   return ctx;
+}
+
+/**
+ * Page/server-component variant. Because a layout and its page render
+ * concurrently in the App Router, a layout guard can't stop a page from
+ * executing — so pages must guard themselves. Instead of throwing (which yields
+ * a 500), redirect a signed-in-but-org-less user to the label picker, and a
+ * signed-out user to sign-in.
+ */
+export async function requireContextOrRedirect(): Promise<RequestContext> {
+  const ctx = await getContext();
+  if (ctx) return ctx;
+  const { userId } = await auth();
+  redirect(userId ? "/select-label" : "/sign-in");
 }
 
 export class UnauthorizedError extends Error {

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { batchesRepo, hooksRepo } from "@rotation/db";
-import { requireContext } from "@/lib/context";
+import { requireContextOrRedirect } from "@/lib/context";
 import { BatchFlow } from "@/components/batch/BatchFlow";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export default async function BatchPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const ctx = await requireContext();
+  const ctx = await requireContextOrRedirect();
   const { id } = await params;
 
   const detail = await batchesRepo.getBatchDetail(ctx.label.id, id);
