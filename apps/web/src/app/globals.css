@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens. Dark is the default; light overrides via [data-theme="light"].
+ * Values come straight from the build spec. Later, per-label theming can
+ * override these same variables from the label record.
+ */
+:root,
+[data-theme="dark"] {
+  --bg: #141310;
+  --panel: #1c1a15;
+  --border: #2c2820;
+  --text-primary: #ede9e1;
+  --text-secondary: #8f897a;
+  --text-faint: #59544a;
+  --accent: #c9982e;
+  --complete: #4f9e93;
+}
+
+[data-theme="light"] {
+  --bg: #f6f3ec;
+  --panel: #fdfcf8;
+  --border: #e3ddcc;
+  --text-primary: #211f19;
+  --text-secondary: #726b5a;
+  --text-faint: #a89f8a;
+  --accent: #9c7420;
+  --complete: #367b70;
+}
+
+html {
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Data-like text (filenames, counts, statuses, step numbers) uses mono. */
+.data {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle grid-cell pop animation when a render lands. */
+@keyframes cell-in {
+  from {
+    transform: scale(0.9);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.cell-complete {
+  animation: cell-in 220ms ease-out;
+}
