@@ -1,9 +1,14 @@
 import { z } from "zod";
 
 /**
- * Server-side environment. Validated lazily so importing this package in the
- * browser bundle (types only) doesn't blow up. Call `serverEnv()` from Node
- * contexts (API routes, worker) only.
+ * Server-side INFRA environment (DB, storage, queue) shared by web + worker.
+ * Validated lazily so importing this package in the browser bundle (types only)
+ * doesn't blow up. Call `serverEnv()` from Node contexts only.
+ *
+ * Clerk keys are intentionally NOT here: `@clerk/nextjs` reads
+ * CLERK_SECRET_KEY / NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY from process.env itself,
+ * and only the web app uses Clerk. Keeping them out of this schema means the
+ * worker doesn't need a Clerk secret just to talk to R2/DB/Redis.
  */
 const schema = z.object({
   DATABASE_URL: z.string().url(),
@@ -18,9 +23,6 @@ const schema = z.object({
 
   // Queue (BullMQ / Redis)
   REDIS_URL: z.string().min(1),
-
-  // Clerk
-  CLERK_SECRET_KEY: z.string().min(1),
 });
 
 export type ServerEnv = z.infer<typeof schema>;

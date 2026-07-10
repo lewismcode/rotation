@@ -47,10 +47,10 @@ Once Clerk and R2 are set up, this is deploy-and-test — no code changes needed
 - **Start command:** `npm run start --workspace @rotation/worker`
 - ffmpeg is provided by the root `nixpacks.toml`.
 
-## 4. Environment variables (both services)
+## 4. Environment variables
 
-Set these on **both** services (Railway lets you share via a shared variable
-group). `DATABASE_URL` and `REDIS_URL` should reference the plugin variables.
+**Infra vars — on BOTH services** (`DATABASE_URL`/`REDIS_URL` reference the
+plugins). The worker needs these to reach R2/DB/Redis:
 
 ```
 DATABASE_URL=${{Postgres.DATABASE_URL}}
@@ -60,14 +60,24 @@ R2_ACCOUNT_ID=...
 R2_ACCESS_KEY_ID=...
 R2_SECRET_ACCESS_KEY=...
 R2_BUCKET=rotation
+```
 
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
-CLERK_SECRET_KEY=sk_...
+**Clerk vars — on the `web` service only** (the worker never touches Clerk).
+Both keys come from the Clerk dashboard → your app → **API keys**:
+
+```
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...   # the "Public key" (client, build-time)
+CLERK_SECRET_KEY=sk_...                     # the "default" secret key (server-only)
 NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
 NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/batches
 NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/batches
 ```
+
+> Enable **Organizations** in Clerk (Organizations tab). On first login the app
+> shows a "choose/create your label" screen — that creates the org (= label) and
+> unblocks the app. `pk_test_`/`sk_test_` (Development instance) keys are fine for
+> testing.
 
 Worker-only optional tuning: `RENDER_CONCURRENCY`, `PROBE_CONCURRENCY`,
 `FONT_PATH` (see below).

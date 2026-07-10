@@ -18,5 +18,7 @@ export const config = {
     // Skip Next internals and static files.
     "/((?!_next|.*\\..*).*)",
     "/(api|trpc)(.*)",
+    // Clerk auto-proxy path (handshake / proxied Frontend API).
+    "/__clerk/:path*",
   ],
 };
