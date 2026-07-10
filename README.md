@@ -89,17 +89,13 @@ e.g.:
 
 ## Deploying on Railway
 
-Two services from this one repo, sharing the same env vars, plus the Postgres and
-Redis addons:
+Two services from this one repo (web + worker), sharing env vars, plus the
+Postgres and Redis plugins. `ffmpeg` is installed via the root `nixpacks.toml`;
+`tsx` is a runtime dependency so the worker and migrations run in production.
 
-- **web** — build `npm install && npm run build --workspace @rotation/web`,
-  start `npm run start --workspace @rotation/web`. Run `npm run db:migrate` once
-  as a release/deploy step.
-- **worker** — start `npm run start --workspace @rotation/worker`. It's a
-  persistent process (not serverless) so long ffmpeg jobs are fine. `ffmpeg` is
-  installed by `apps/worker/nixpacks.toml`; no fragile binary download at
-  install time. Drop a bold font in `apps/worker/assets/fonts/` (or set
-  `FONT_PATH`) for IG-accurate captions.
+See **[`DEPLOY.md`](./DEPLOY.md)** for exact per-service build/start commands,
+env vars, seeding, and R2/Clerk setup. Once Clerk + R2 are configured it's
+deploy-and-test with no code changes.
 
 ## Notes / limits
 

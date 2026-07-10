@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@rotation/shared": "*",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
     "@types/pg": "^8.11.10"

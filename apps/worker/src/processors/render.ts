@@ -3,12 +3,11 @@ import {
   getObjectStream,
   putObject,
   R2_PREFIX,
-  REELS,
   outputFilename,
   type RenderJob,
 } from "@rotation/shared";
 import { readFile } from "node:fs/promises";
-import { ffmpeg } from "../ffmpeg.js";
+import { compositeReel } from "../composite.js";
 import { renderHookPng } from "../overlay/renderHookPng.js";
 import {
   withTmpDir,
@@ -61,7 +60,7 @@ export async function processRender(job: RenderJob): Promise<void> {
       // 2. caption overlay
       await bufferToFile(renderHookPng(hook.text), pngPath);
       // 3. composite + encode
-      await runFfmpeg(inPath, pngPath, outPath);
+      await compositeReel(inPath, pngPath, outPath);
       // 4. upload
       const bytes = await readFile(outPath);
       await putObject(outKey, bytes, "video/mp4");
@@ -76,58 +75,4 @@ export async function processRender(job: RenderJob): Promise<void> {
   }
 
   await batchesRepo.refreshBatchStatus(render.batch_id);
-}
-
-/**
- * The single ffmpeg invocation. cover-crop then overlay:
- *   [0:v] scale to cover 1080x1920, center-crop, reset SAR   -> [base]
- *   [base][1:v] overlay caption png at 0,0                   -> [v]
- * Audio is passed through/re-encoded if present (0:a?).
- */
-function runFfmpeg(
-  inputPath: string,
-  overlayPath: string,
-  outputPath: string
-): Promise<void> {
-  const { WIDTH, HEIGHT } = REELS;
-  return new Promise((resolve, reject) => {
-    ffmpeg()
-      .input(inputPath)
-      .input(overlayPath)
-      .complexFilter([
-        `[0:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
-          `crop=${WIDTH}:${HEIGHT},setsar=1[base]`,
-        `[base][1:v]overlay=0:0:format=auto[v]`,
-      ])
-      .outputOptions([
-        "-map",
-        "[v]",
-        "-map",
-        "0:a?",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "medium",
-        "-profile:v",
-        "high",
-        "-pix_fmt",
-        "yuv420p",
-        "-b:v",
-        REELS.VIDEO_BITRATE,
-        "-maxrate",
-        REELS.VIDEO_MAXRATE,
-        "-bufsize",
-        REELS.VIDEO_BUFSIZE,
-        "-c:a",
-        "aac",
-        "-b:a",
-        REELS.AUDIO_BITRATE,
-        "-movflags",
-        "+faststart",
-        "-shortest",
-      ])
-      .on("end", () => resolve())
-      .on("error", (err) => reject(err))
-      .save(outputPath);
-  });
 }

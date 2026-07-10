@@ -1,0 +1,12 @@
+# Shared Nixpacks build for both Railway services (web + worker). Both use the
+# repo root so npm workspaces resolve. ffmpeg is provided by the OS image (used
+# by the worker; harmless in the web image). Per-service BUILD and START
+# commands are set in each service's Railway settings — see DEPLOY.md.
+[phases.setup]
+nixPkgs = ["nodejs_20", "ffmpeg"]
+
+[phases.install]
+cmds = ["npm install"]
+
+# No build/start here on purpose: the web service sets its own build
+# (`next build`) and start, and the worker sets its own start, in Railway.
