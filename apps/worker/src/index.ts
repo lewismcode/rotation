@@ -60,8 +60,14 @@ void purgeQueue
     removeOnFail: true,
   })
   .catch((err) => console.error("[purge] schedule failed:", err?.message));
+// Stable jobId so multiple replicas / a restart don't each run a full purge
+// concurrently (matches the repeatable purge-cycle dedupe above).
 void purgeQueue
-  .add("purge-startup", {}, { removeOnComplete: true, removeOnFail: true })
+  .add("purge-startup", {}, {
+    jobId: "purge-startup",
+    removeOnComplete: true,
+    removeOnFail: true,
+  })
   .catch(() => {});
 
 // A job only "really" failed once BullMQ has spent every attempt (or stalled
