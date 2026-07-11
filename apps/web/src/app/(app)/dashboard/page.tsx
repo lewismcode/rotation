@@ -7,6 +7,7 @@ import { NewBatchButton } from "@/components/NewBatchButton";
 import { StatusPill } from "@/components/StatusPill";
 import { ActivityChart } from "@/components/dashboard/ActivityChart";
 import { StyleBreakdown } from "@/components/dashboard/StyleBreakdown";
+import { Stat } from "@/components/dashboard/Stat";
 
 export const dynamic = "force-dynamic";
 
@@ -128,28 +129,6 @@ export default async function DashboardPage() {
           )}
         </section>
       </div>
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: number;
-  accent?: boolean;
-}) {
-  return (
-    <div className="glass rounded-2xl p-4">
-      <div
-        className="data text-3xl font-semibold tabular-nums"
-        style={{ color: accent ? "var(--accent)" : "var(--text-primary)" }}
-      >
-        {value.toLocaleString()}
-      </div>
-      <div className="mt-1 text-xs text-secondary">{label}</div>
     </div>
   );
 }

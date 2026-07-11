@@ -9,6 +9,18 @@ export async function getUserByClerkId(clerkUserId: string): Promise<User | null
   return rows[0] ?? null;
 }
 
+/** Fetch a user by id, scoped to a label (defends the admin drill-down). */
+export async function getUserInLabel(
+  labelId: string,
+  userId: string
+): Promise<User | null> {
+  const { rows } = await query<User>(
+    "SELECT * FROM users WHERE id = $1 AND label_id = $2",
+    [userId, labelId]
+  );
+  return rows[0] ?? null;
+}
+
 /** Upsert a user into a label. Role defaults to artist for invited users. */
 export async function upsertUser(input: {
   clerkUserId: string;

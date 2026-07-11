@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { clerkClient } from "@clerk/nextjs/server";
 import { statsRepo } from "@rotation/db";
@@ -30,6 +31,7 @@ export default async function RosterPage() {
         "Member";
       return {
         key: p?.userId ?? m.id,
+        dbUserId: s?.userId ?? null,
         name,
         email: p?.identifier ?? "",
         imageUrl: p?.imageUrl ?? "",
@@ -53,8 +55,9 @@ export default async function RosterPage() {
       </div>
 
       <ul className="rise grid gap-3 sm:grid-cols-2">
-        {members.map((m) => (
-          <li key={m.key} className="glass flex items-center gap-4 rounded-2xl p-4">
+        {members.map((m) => {
+          const inner = (
+            <>
             {m.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -99,8 +102,21 @@ export default async function RosterPage() {
                 ? new Date(m.lastActive).toLocaleDateString()
                 : "—"}
             </span>
-          </li>
-        ))}
+            </>
+          );
+          const cls = "glass flex items-center gap-4 rounded-2xl p-4";
+          return (
+            <li key={m.key}>
+              {m.dbUserId ? (
+                <Link href={`/roster/${m.dbUserId}`} className={`${cls} glass-hover`}>
+                  {inner}
+                </Link>
+              ) : (
+                <div className={cls}>{inner}</div>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
