@@ -1,114 +1,83 @@
-import { unlink } from "node:fs/promises";
 import { ffmpeg } from "./ffmpeg.js";
 import { REELS } from "@rotation/shared";
 
 type AudioMode = "aac" | "copy" | "none";
 
+// x264 speed/quality preset. veryfast is a big speed win over medium at this
+// bitrate with negligible quality loss for social video (IG re-encodes anyway).
+const PRESET = process.env.X264_PRESET || "veryfast";
+
+function audioOptions(mode: AudioMode): string[] {
+  if (mode === "none") return ["-an"];
+  if (mode === "copy") return ["-c:a", "copy"];
+  return ["-c:a", "aac", "-b:a", REELS.AUDIO_BITRATE];
+}
+
 function errTail(stderr: string | null): string {
   return stderr ? `\n${stderr.split("\n").slice(-8).join("\n")}` : "";
 }
 
+// Escape a path for use inside ffmpeg's movie= filter argument.
+function escFilterPath(p: string): string {
+  return p.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/:/g, "\\:");
+}
+
 /**
- * Two-pass composite so ffmpeg handles rotation natively (a `-vf` simple
- * filtergraph autorotates from the display matrix — no fragile manual sign
- * guessing across ffmpeg versions):
+ * Single-pass composite. A `-vf` simple filtergraph is used (not
+ * -filter_complex) so ffmpeg autorotates the input from its display matrix —
+ * correct across ffmpeg versions, no manual sign guessing — while the caption
+ * PNG is pulled in via the `movie` source filter so it all happens in one
+ * encode:
  *
- *   Pass 1 (-vf): autorotate upright, scale to cover 1080x1920, center-crop,
- *                 force 8-bit yuv420p (HDR/10-bit safe). Resilient audio:
- *                 transcode to AAC → copy source → drop (a silent reel beats a
- *                 failed render).
- *   Pass 2:       overlay the caption PNG and encode at the Reels target.
+ *   autorotate -> scale to cover 1080x1920 -> center-crop -> force 8-bit
+ *   (HDR/10-bit safe) -> overlay caption
+ *
+ * Audio is resilient: transcode to AAC -> copy the source stream -> drop it
+ * (a silent reel beats a failed render). No explicit -map, so the filtered
+ * video + audio auto-map (a -map would disable video mapping with -vf).
  */
 export async function compositeReel(
   inputPath: string,
   overlayPath: string,
   outputPath: string
 ): Promise<void> {
-  const basePath = `${outputPath}.base.mp4`;
-  try {
-    let lastErr: Error | null = null;
-    let done = false;
-    for (const mode of ["aac", "copy", "none"] as AudioMode[]) {
-      try {
-        await uprightResize(inputPath, basePath, mode);
-        if (mode !== "aac") {
-          console.log(`[render] audio fallback used: ${mode} (${inputPath})`);
-        }
-        done = true;
-        break;
-      } catch (err) {
-        lastErr = err as Error;
+  let lastErr: Error | null = null;
+  for (const mode of ["aac", "copy", "none"] as AudioMode[]) {
+    try {
+      await run(inputPath, overlayPath, outputPath, mode);
+      if (mode !== "aac") {
+        console.log(`[render] audio fallback used: ${mode} (${inputPath})`);
       }
+      return;
+    } catch (err) {
+      lastErr = err as Error;
     }
-    if (!done) throw lastErr ?? new Error("ffmpeg resize failed");
-
-    await overlayCaption(basePath, overlayPath, outputPath);
-  } finally {
-    await unlink(basePath).catch(() => {});
   }
+  throw lastErr ?? new Error("ffmpeg composite failed");
 }
 
-/** Pass 1: ffmpeg-native autorotate + cover-crop to 1080x1920 (no -map so the
- * filtered video + audio auto-map; -map would disable video mapping). */
-function uprightResize(
+function run(
   inputPath: string,
-  basePath: string,
+  overlayPath: string,
+  outputPath: string,
   audioMode: AudioMode
 ): Promise<void> {
   const { WIDTH, HEIGHT } = REELS;
-  const audio =
-    audioMode === "none"
-      ? ["-an"]
-      : audioMode === "copy"
-        ? ["-c:a", "copy"]
-        : ["-c:a", "aac", "-b:a", REELS.AUDIO_BITRATE];
+  const graph =
+    `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+    `crop=${WIDTH}:${HEIGHT},format=yuv420p,setsar=1[b];` +
+    `movie='${escFilterPath(overlayPath)}'[h];[b][h]overlay=0:0`;
 
   return new Promise((resolve, reject) => {
     ffmpeg()
       .input(inputPath)
-      .videoFilters(
-        `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
-          `crop=${WIDTH}:${HEIGHT},format=yuv420p,setsar=1`
-      )
       .outputOptions([
+        "-vf",
+        graph,
         "-c:v",
         "libx264",
         "-preset",
-        "veryfast",
-        "-crf",
-        "18",
-        ...audio,
-        "-movflags",
-        "+faststart",
-      ])
-      .on("end", () => resolve())
-      .on("error", (err: Error, _o: string | null, stderr: string | null) =>
-        reject(new Error(`${err.message}${errTail(stderr)}`))
-      )
-      .save(basePath);
-  });
-}
-
-/** Pass 2: overlay the caption onto the already-upright base and encode. */
-function overlayCaption(
-  basePath: string,
-  overlayPath: string,
-  outputPath: string
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    ffmpeg()
-      .input(basePath)
-      .input(overlayPath)
-      .complexFilter(["[0:v][1:v]overlay=0:0[v]"])
-      .outputOptions([
-        "-map",
-        "[v]",
-        "-map",
-        "0:a?",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "medium",
+        PRESET,
         "-profile:v",
         "high",
         "-pix_fmt",
@@ -119,8 +88,7 @@ function overlayCaption(
         REELS.VIDEO_MAXRATE,
         "-bufsize",
         REELS.VIDEO_BUFSIZE,
-        "-c:a",
-        "copy",
+        ...audioOptions(audioMode),
         "-movflags",
         "+faststart",
         "-shortest",
