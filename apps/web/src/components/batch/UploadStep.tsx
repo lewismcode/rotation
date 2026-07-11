@@ -5,9 +5,39 @@ import type { Clip } from "@rotation/shared/types";
 import { CropControl } from "./CropControl";
 
 interface LocalUpload {
+  id: string;
   name: string;
   status: "uploading" | "error";
+  progress: number; // 0..1
   error?: string;
+}
+
+// How many clips upload to R2 at once. Direct-to-R2 PUTs are independent, so a
+// handful in flight saturates the connection far better than one-at-a-time.
+const UPLOAD_CONCURRENCY = 4;
+
+// PUT a file to a presigned URL via XHR so we get real upload progress (fetch
+// can't report request-body progress). Resolves on 2xx, rejects otherwise.
+function putWithProgress(
+  url: string,
+  file: File,
+  onProgress: (pct: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error("Upload to storage failed"));
+    xhr.onerror = () => reject(new Error("Upload to storage failed"));
+    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.send(file);
+  });
 }
 
 /**
@@ -37,7 +67,13 @@ export function UploadStep({
   const folderRef = useRef<HTMLInputElement>(null);
 
   async function uploadOne(file: File) {
-    setLocal((l) => [...l, { name: file.name, status: "uploading" }]);
+    const id = crypto.randomUUID();
+    setLocal((l) => [
+      ...l,
+      { id, name: file.name, status: "uploading", progress: 0 },
+    ]);
+    const setProgress = (progress: number) =>
+      setLocal((l) => l.map((u) => (u.id === id ? { ...u, progress } : u)));
     try {
       const presign = await fetch(`/api/batches/${batchId}/clips`, {
         method: "POST",
@@ -54,12 +90,7 @@ export function UploadStep({
       }
       const { clip, uploadUrl } = await presign.json();
 
-      const put = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type || "video/mp4" },
-        body: file,
-      });
-      if (!put.ok) throw new Error("Upload to storage failed");
+      await putWithProgress(uploadUrl, file, setProgress);
 
       // Kick off the async probe. If this fails (e.g. the job queue / Redis is
       // unavailable), surface it — otherwise the clip would silently hang on
@@ -73,13 +104,12 @@ export function UploadStep({
           error || "Uploaded to storage, but couldn't start processing"
         );
       }
-      // Row now exists server-side; drop the local placeholder and refresh.
-      setLocal((l) => l.filter((u) => u.name !== file.name));
-      await onChanged();
+      // Row now exists server-side; drop the local placeholder.
+      setLocal((l) => l.filter((u) => u.id !== id));
     } catch (err) {
       setLocal((l) =>
         l.map((u) =>
-          u.name === file.name
+          u.id === id
             ? { ...u, status: "error", error: (err as Error).message }
             : u
         )
@@ -92,8 +122,23 @@ export function UploadStep({
     const videos = Array.from(files).filter(
       (f) => f.type.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi)$/i.test(f.name)
     );
-    // Sequential to keep presign/probe ordering simple and avoid bursts.
-    for (const f of videos) await uploadOne(f);
+    if (videos.length === 0) return;
+
+    // Upload several at once (bounded) instead of one-at-a-time — this is the
+    // big win for large batches. A shared queue feeds UPLOAD_CONCURRENCY
+    // workers; we refetch the batch just once at the end rather than after
+    // every file (polling then picks up probe → ready transitions).
+    const queue = [...videos];
+    const worker = async (): Promise<void> => {
+      const next = queue.shift();
+      if (!next) return;
+      await uploadOne(next);
+      await worker();
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(UPLOAD_CONCURRENCY, videos.length) }, worker)
+    );
+    await onChanged();
   }
 
   return (
@@ -169,13 +214,36 @@ export function UploadStep({
         ))}
         {local.map((u) => (
           <li
-            key={u.name}
-            className="flex items-center justify-between rounded-md border border-border bg-bg/30 px-3 py-2"
+            key={u.id}
+            className="rounded-md border border-border bg-bg/30 px-3 py-2"
           >
-            <span className="data truncate text-sm text-primary">{u.name}</span>
-            <span className="data text-xs" style={{ color: u.status === "error" ? "#d98b6a" : "var(--text-secondary)" }}>
-              {u.status === "error" ? u.error ?? "failed" : "uploading…"}
-            </span>
+            <div className="flex items-center justify-between gap-2">
+              <span className="data truncate text-sm text-primary">
+                {u.name}
+              </span>
+              <span
+                className="data shrink-0 text-xs"
+                style={{
+                  color:
+                    u.status === "error" ? "#d98b6a" : "var(--text-secondary)",
+                }}
+              >
+                {u.status === "error"
+                  ? u.error ?? "failed"
+                  : `${Math.round(u.progress * 100)}%`}
+              </span>
+            </div>
+            {u.status !== "error" ? (
+              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-[var(--glass-border)]">
+                <div
+                  className="h-full rounded-full transition-all duration-200"
+                  style={{
+                    width: `${Math.max(3, u.progress * 100)}%`,
+                    background: "var(--accent)",
+                  }}
+                />
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
