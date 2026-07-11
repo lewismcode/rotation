@@ -43,6 +43,20 @@ export async function enqueueRender(job: RenderJob): Promise<void> {
   await queues().render.add("render", job, { jobId: `render-${job.renderId}` });
 }
 
+/**
+ * Re-enqueue a single failed render. Failed jobs are retained (removeOnFail),
+ * so `render-<id>` still exists in Redis and BullMQ would reject a duplicate
+ * jobId — the retry attempt is appended to the id to keep it unique.
+ */
+export async function enqueueRenderRetry(
+  job: RenderJob,
+  retryCount: number
+): Promise<void> {
+  await queues().render.add("render", job, {
+    jobId: `render-${job.renderId}-r${retryCount}`,
+  });
+}
+
 export async function enqueueRenders(jobs: RenderJob[]): Promise<void> {
   if (jobs.length === 0) return;
   await queues().render.addBulk(

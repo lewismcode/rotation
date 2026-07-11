@@ -85,6 +85,7 @@ export interface Render {
   status: RenderStatus;
   caption_style: string;
   error_message: string | null;
+  retry_count: number;
   created_at: string;
   completed_at: string | null;
 }

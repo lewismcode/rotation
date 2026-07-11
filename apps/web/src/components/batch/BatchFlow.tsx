@@ -174,6 +174,7 @@ export function BatchFlow({
           clips={detail.clips}
           hooks={hooks}
           renders={detail.renders}
+          onRetried={refetch}
         />
       </StepShell>
 

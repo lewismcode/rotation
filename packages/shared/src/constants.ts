@@ -27,6 +27,8 @@ export const LIMITS = {
   /** clips * hooks ceiling to keep a single batch bounded. */
   MAX_RENDERS_PER_BATCH: 300,
   MAX_UPLOAD_BYTES: 500 * 1024 * 1024, // 500 MB per clip
+  /** One-click retries allowed on a failed render before we ask for support. */
+  MAX_RENDER_RETRIES: 3,
 } as const;
 
 /**

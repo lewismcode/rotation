@@ -1,5 +1,5 @@
 import { query, tx } from "../client.js";
-import type { Render, RenderStatus } from "@rotation/shared";
+import { LIMITS, type Render, type RenderStatus } from "@rotation/shared";
 
 /**
  * Fan-out: create one render row per clip x hook, all queued, in a single
@@ -73,6 +73,30 @@ export async function failRender(
      WHERE id = $1`,
     [renderId, message.slice(0, 2000)]
   );
+}
+
+/**
+ * Reset a failed render back to 'queued' so it can be re-rendered, bumping
+ * retry_count. Only touches rows that are actually failed and still under the
+ * retry cap — the guard is in the WHERE clause so it's race-safe (two clicks
+ * can't double-enqueue or exceed the cap). Returns the updated row, or null if
+ * the render wasn't eligible (not failed, or cap reached).
+ */
+export async function retryRender(
+  labelId: string,
+  renderId: string
+): Promise<Render | null> {
+  const { rows } = await query<Render>(
+    `UPDATE renders r
+       SET status = 'queued', error_message = NULL,
+           retry_count = retry_count + 1, completed_at = NULL
+      FROM batches b
+     WHERE r.id = $1 AND r.batch_id = b.id AND b.label_id = $2
+       AND r.status = 'failed' AND r.retry_count < $3
+     RETURNING r.*`,
+    [renderId, labelId, LIMITS.MAX_RENDER_RETRIES]
+  );
+  return rows[0] ?? null;
 }
 
 export async function setRenderStatus(

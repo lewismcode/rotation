@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import type { Clip, Hook, Render, RenderStatus } from "@rotation/shared/types";
+import { LIMITS } from "@rotation/shared/constants";
 import { stemOf } from "@rotation/shared/slug";
 
 /**
@@ -13,10 +14,12 @@ export function RenderGrid({
   clips,
   hooks,
   renders,
+  onRetried,
 }: {
   clips: Clip[];
   hooks: Hook[];
   renders: Render[];
+  onRetried?: () => void;
 }) {
   if (renders.length === 0) {
     return (
@@ -99,6 +102,16 @@ export function RenderGrid({
         </div>
       </div>
 
+      {/* failed renders — one-click retry per clip x hook */}
+      {failed > 0 ? (
+        <FailedList
+          renders={renders.filter((r) => r.status === "failed")}
+          clipById={new Map(clips.map((c) => [c.id, c]))}
+          hookNumberById={new Map(cols.map((h, i) => [h.id, i + 1]))}
+          onRetried={onRetried}
+        />
+      ) : null}
+
       {/* legend */}
       <ol className="space-y-1.5 border-t border-[var(--glass-border)] pt-4">
         {cols.map((h, i) => (
@@ -114,6 +127,101 @@ export function RenderGrid({
         ))}
       </ol>
     </div>
+  );
+}
+
+/**
+ * The failed-render list under the matrix. Each row is one clip x hook that
+ * errored, with a one-click Retry that re-enqueues just that pairing. Once a
+ * render has burned through its retries we stop offering the button and point
+ * the user at support instead of letting them spin on a broken clip.
+ */
+function FailedList({
+  renders,
+  clipById,
+  hookNumberById,
+  onRetried,
+}: {
+  renders: Render[];
+  clipById: Map<string, Clip>;
+  hookNumberById: Map<string, number>;
+  onRetried?: () => void;
+}) {
+  return (
+    <div className="space-y-2 border-t border-[var(--glass-border)] pt-4">
+      <span className="data text-xs" style={{ color: "#d98b6a" }}>
+        {renders.length} failed
+      </span>
+      <ul className="space-y-1.5">
+        {renders.map((r) => {
+          const clip = clipById.get(r.clip_id);
+          const hookNo = hookNumberById.get(r.hook_id);
+          const exhausted = r.retry_count >= LIMITS.MAX_RENDER_RETRIES;
+          return (
+            <li
+              key={r.id}
+              className="flex items-center justify-between gap-3 text-xs"
+            >
+              <div className="min-w-0">
+                <span className="data truncate text-secondary">
+                  {clip ? stemOf(clip.original_filename) : "clip"}
+                  {hookNo ? ` · hook ${hookNo}` : ""}
+                </span>
+                {r.error_message ? (
+                  <span
+                    className="block truncate text-faint"
+                    title={r.error_message}
+                  >
+                    {r.error_message}
+                  </span>
+                ) : null}
+              </div>
+              {exhausted ? (
+                <span className="shrink-0 text-faint">contact support</span>
+              ) : (
+                <RetryButton renderId={r.id} onRetried={onRetried} />
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function RetryButton({
+  renderId,
+  onRetried,
+}: {
+  renderId: string;
+  onRetried?: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  async function retry() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/renders/${renderId}/retry`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const { error } = await res.json().catch(() => ({}));
+        throw new Error(error || "Retry failed");
+      }
+      onRetried?.();
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button
+      onClick={retry}
+      disabled={busy}
+      className="shrink-0 rounded-md border border-border px-3 py-1 text-xs text-primary hover:border-accent disabled:opacity-50"
+    >
+      {busy ? "…" : "Retry"}
+    </button>
   );
 }
 
