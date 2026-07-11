@@ -81,6 +81,7 @@ export interface Render {
   clip_id: string;
   hook_id: string;
   r2_key_output: string | null;
+  thumbnail_r2_key: string | null;
   status: RenderStatus;
   caption_style: string;
   error_message: string | null;

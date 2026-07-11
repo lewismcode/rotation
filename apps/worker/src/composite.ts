@@ -56,6 +56,32 @@ export async function compositeReel(
   throw lastErr ?? new Error("ffmpeg composite failed");
 }
 
+/**
+ * Extract a ~320px-wide JPEG thumbnail from a finished render. Seeks to ~1s to
+ * skip black/fade-in frames; if the clip is shorter than that (seek yields
+ * nothing), falls back to the first frame.
+ */
+export async function extractThumbnail(
+  videoPath: string,
+  thumbPath: string
+): Promise<void> {
+  const attempt = (seek: number): Promise<void> =>
+    new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(videoPath)
+        .inputOptions(["-ss", String(seek)])
+        .outputOptions(["-frames:v", "1", "-vf", "scale=320:-2", "-q:v", "3"])
+        .on("end", () => resolve())
+        .on("error", (err: Error) => reject(err))
+        .save(thumbPath);
+    });
+  try {
+    await attempt(1);
+  } catch {
+    await attempt(0);
+  }
+}
+
 function run(
   inputPath: string,
   overlayPath: string,

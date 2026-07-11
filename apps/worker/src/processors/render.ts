@@ -7,7 +7,7 @@ import {
   type RenderJob,
 } from "@rotation/shared";
 import { readFile } from "node:fs/promises";
-import { compositeReel } from "../composite.js";
+import { compositeReel, extractThumbnail } from "../composite.js";
 import { renderHookPng } from "../overlay/renderHookPng.js";
 import {
   withTmpDir,
@@ -50,10 +50,14 @@ export async function processRender(job: RenderJob): Promise<void> {
       outName
     );
 
+    const thumbKey = outKey.replace(/\.mp4$/i, "_thumb.jpg");
+    let thumbUploaded = false;
+
     await withTmpDir(async (dir) => {
       const inPath = joinPath(dir, "input");
       const pngPath = joinPath(dir, "hook.png");
       const outPath = joinPath(dir, outName);
+      const thumbPath = joinPath(dir, "thumb.jpg");
 
       // 1. source
       await streamToFile(await getObjectStream(clip.r2_key_original), inPath);
@@ -61,12 +65,26 @@ export async function processRender(job: RenderJob): Promise<void> {
       await bufferToFile(renderHookPng(hook.text, render.caption_style), pngPath);
       // 3. composite + encode
       await compositeReel(inPath, pngPath, outPath);
-      // 4. upload
-      const bytes = await readFile(outPath);
-      await putObject(outKey, bytes, "video/mp4");
+      // 4. upload output
+      await putObject(outKey, await readFile(outPath), "video/mp4");
+      // 5. thumbnail (best-effort — a missing thumb shouldn't fail the render)
+      try {
+        await extractThumbnail(outPath, thumbPath);
+        await putObject(thumbKey, await readFile(thumbPath), "image/jpeg");
+        thumbUploaded = true;
+      } catch (err) {
+        console.warn(
+          `[render] thumbnail failed for ${render.id}:`,
+          (err as Error).message
+        );
+      }
     });
 
-    await rendersRepo.completeRender(render.id, outKey);
+    await rendersRepo.completeRender(
+      render.id,
+      outKey,
+      thumbUploaded ? thumbKey : null
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await rendersRepo.failRender(render.id, message);

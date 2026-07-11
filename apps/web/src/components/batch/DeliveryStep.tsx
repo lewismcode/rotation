@@ -41,7 +41,7 @@ export function DeliveryStep({
         <ZipButton batchId={batchId} />
       </div>
 
-      <ul className="space-y-2">
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {complete.map((r) => {
           const clip = clipById.get(r.clip_id);
           const hook = hookById.get(r.hook_id);
@@ -52,15 +52,37 @@ export function DeliveryStep({
           return (
             <li
               key={r.id}
-              className="flex items-center justify-between gap-3 rounded-md border border-border bg-bg/30 px-3 py-2.5"
+              className="glass flex flex-col overflow-hidden rounded-xl"
             >
-              <div className="flex min-w-0 flex-col">
-                <span className="data truncate text-sm text-primary">{name}</span>
+              <div
+                className="relative aspect-[9/16] w-full overflow-hidden"
+                style={{ background: "#0d0c0a" }}
+              >
+                {r.thumbnail_r2_key ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/api/renders/${r.id}/thumbnail`}
+                    alt=""
+                    loading="lazy"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="grid h-full w-full place-items-center text-xs text-faint">
+                    preview soon
+                  </div>
+                )}
                 {hook ? (
-                  <span className="truncate text-xs text-faint">{hook.text}</span>
+                  <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5 text-[11px] text-white/90">
+                    {hook.text}
+                  </span>
                 ) : null}
               </div>
-              <DownloadButton renderId={r.id} />
+              <div className="flex items-center justify-between gap-2 px-2.5 py-2">
+                <span className="data truncate text-[11px] text-secondary" title={name}>
+                  {name}
+                </span>
+                <DownloadButton renderId={r.id} />
+              </div>
             </li>
           );
         })}

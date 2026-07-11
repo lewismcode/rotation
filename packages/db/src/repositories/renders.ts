@@ -51,14 +51,15 @@ export async function claimRenderProcessing(renderId: string): Promise<void> {
 
 export async function completeRender(
   renderId: string,
-  r2KeyOutput: string
+  r2KeyOutput: string,
+  thumbnailKey: string | null = null
 ): Promise<void> {
   await query(
     `UPDATE renders
-       SET status = 'complete', r2_key_output = $2,
+       SET status = 'complete', r2_key_output = $2, thumbnail_r2_key = $3,
            error_message = NULL, completed_at = now()
      WHERE id = $1`,
-    [renderId, r2KeyOutput]
+    [renderId, r2KeyOutput, thumbnailKey]
   );
 }
 
@@ -90,11 +91,19 @@ export async function listCompleteRenders(batchId: string): Promise<Render[]> {
   return rows;
 }
 
-/** All output R2 keys for a batch — for the retention purge. */
+/** All output + thumbnail R2 keys for a batch — for the retention purge. */
 export async function listOutputKeys(batchId: string): Promise<string[]> {
-  const { rows } = await query<{ r2_key_output: string }>(
-    "SELECT r2_key_output FROM renders WHERE batch_id = $1 AND r2_key_output IS NOT NULL",
+  const { rows } = await query<{
+    r2_key_output: string | null;
+    thumbnail_r2_key: string | null;
+  }>(
+    "SELECT r2_key_output, thumbnail_r2_key FROM renders WHERE batch_id = $1",
     [batchId]
   );
-  return rows.map((r) => r.r2_key_output);
+  const keys: string[] = [];
+  for (const r of rows) {
+    if (r.r2_key_output) keys.push(r.r2_key_output);
+    if (r.thumbnail_r2_key) keys.push(r.thumbnail_r2_key);
+  }
+  return keys;
 }
