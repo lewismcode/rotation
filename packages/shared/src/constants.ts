@@ -21,7 +21,8 @@ export const REELS = {
  * with the label once real footage volume is known.
  */
 export const LIMITS = {
-  MAX_CLIP_DURATION_SECONDS: 120,
+  /** Reels cap out around 3 min; reject longer clips at confirm. */
+  MAX_CLIP_DURATION_SECONDS: 180,
   MAX_CLIPS_PER_BATCH: 50,
   MAX_HOOKS_PER_BATCH: 20,
   /** clips * hooks ceiling to keep a single batch bounded. */

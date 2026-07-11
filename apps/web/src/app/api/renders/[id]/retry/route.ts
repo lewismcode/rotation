@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { rendersRepo, batchesRepo } from "@rotation/db";
 import { enqueueRenderRetry } from "@rotation/queue";
 import { requireContext } from "@/lib/context";
+import { scopedUserId } from "@/lib/scope";
 import { apiHandler, badRequest } from "@/lib/api";
 
 export const runtime = "nodejs";
@@ -17,7 +18,11 @@ export const POST = apiHandler(
     const ctx = await requireContext();
     const { id } = await params;
 
-    const render = await rendersRepo.retryRender(ctx.label.id, id);
+    const render = await rendersRepo.retryRender(
+      ctx.label.id,
+      id,
+      scopedUserId(ctx)
+    );
     if (!render) {
       badRequest(
         "This render can't be retried — it isn't failed, or it's hit the retry limit."

@@ -32,16 +32,22 @@ export async function listAllClipKeys(batchId: string): Promise<string[]> {
   return rows.map((r) => r.r2_key_original);
 }
 
-/** Fetch a clip and verify it belongs to the label (join through batch). */
+/**
+ * Fetch a clip and verify it belongs to the label (join through batch). Pass
+ * createdByUserId to additionally restrict to a single creator — artists reach
+ * only their own clips; admins pass undefined for the whole label.
+ */
 export async function getClipScoped(
   labelId: string,
-  clipId: string
+  clipId: string,
+  createdByUserId?: string
 ): Promise<Clip | null> {
   const { rows } = await query<Clip>(
     `SELECT c.* FROM clips c
        JOIN batches b ON b.id = c.batch_id
-     WHERE c.id = $1 AND b.label_id = $2 AND c.archived_at IS NULL`,
-    [clipId, labelId]
+     WHERE c.id = $1 AND b.label_id = $2 AND c.archived_at IS NULL
+       AND ($3::uuid IS NULL OR b.created_by_user_id = $3)`,
+    [clipId, labelId, createdByUserId ?? null]
   );
   return rows[0] ?? null;
 }

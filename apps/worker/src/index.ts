@@ -1,3 +1,4 @@
+import { captureError } from "./sentry.js"; // import first so Sentry inits early
 import express from "express";
 import { Worker, Queue } from "bullmq";
 import { connection } from "@rotation/queue";
@@ -69,9 +70,10 @@ for (const [name, w] of [
   ["zip", zipWorker],
   ["purge", purgeWorker],
 ] as const) {
-  w.on("failed", (job, err) =>
-    console.error(`[${name}] job ${job?.id} failed:`, err?.message)
-  );
+  w.on("failed", (job, err) => {
+    console.error(`[${name}] job ${job?.id} failed:`, err?.message);
+    captureError(err, { queue: name, jobId: job?.id });
+  });
   w.on("completed", (job) => console.log(`[${name}] job ${job.id} completed`));
 }
 

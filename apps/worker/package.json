@@ -9,10 +9,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.65",
     "@rotation/db": "*",
     "@rotation/queue": "*",
     "@rotation/shared": "*",
-    "@napi-rs/canvas": "^0.1.65",
+    "@sentry/node": "^8.55.2",
     "archiver": "^7.0.1",
     "bullmq": "^5.34.5",
     "express": "^4.21.2",

@@ -46,6 +46,22 @@ export const POST = apiHandler(
       badRequest("No ready clips to process (still uploading or probing)");
     }
 
+    // Reject over-length clips up front (before fan-out) with a clear message
+    // naming the offenders, so the whole batch doesn't burn render time on a
+    // clip that shouldn't be a Reel.
+    const maxSec = LIMITS.MAX_CLIP_DURATION_SECONDS;
+    const tooLong = clips.filter(
+      (c) => (c.duration_seconds ?? 0) > maxSec
+    );
+    if (tooLong.length > 0) {
+      const names = tooLong
+        .map((c) => `${c.original_filename} (${Math.round(c.duration_seconds ?? 0)}s)`)
+        .join(", ");
+      badRequest(
+        `These clips are longer than the ${maxSec}s limit and must be trimmed before generating: ${names}`
+      );
+    }
+
     const hooks = await hooksRepo.getHooksByIds(ctx.label.id, hookIds);
     if (hooks.length === 0) badRequest("None of the selected hooks were found");
 

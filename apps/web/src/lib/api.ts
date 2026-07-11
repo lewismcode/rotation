@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { UnauthorizedError } from "./context.js";
 import { ZodError } from "zod";
+import { captureError } from "./sentry.js";
 
 /**
  * Wraps a route handler so tenant/validation errors become clean JSON responses
@@ -26,6 +27,7 @@ export function apiHandler<Args extends unknown[]>(
         return NextResponse.json({ error: err.message }, { status: err.status });
       }
       console.error("[api] unhandled error", err);
+      void captureError(err);
       return NextResponse.json({ error: "Internal error" }, { status: 500 });
     }
   };

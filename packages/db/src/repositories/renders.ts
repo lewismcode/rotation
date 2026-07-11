@@ -28,16 +28,22 @@ export async function createRenders(
   });
 }
 
-/** Fetch a render joined to its batch for label scoping. */
+/**
+ * Fetch a render joined to its batch for label scoping. Pass createdByUserId to
+ * additionally restrict to a single creator (artists can only reach their own
+ * renders; admins pass undefined to see the whole label).
+ */
 export async function getRenderScoped(
   labelId: string,
-  renderId: string
+  renderId: string,
+  createdByUserId?: string
 ): Promise<Render | null> {
   const { rows } = await query<Render>(
     `SELECT r.* FROM renders r
        JOIN batches b ON b.id = r.batch_id
-     WHERE r.id = $1 AND b.label_id = $2`,
-    [renderId, labelId]
+     WHERE r.id = $1 AND b.label_id = $2
+       AND ($3::uuid IS NULL OR b.created_by_user_id = $3)`,
+    [renderId, labelId, createdByUserId ?? null]
   );
   return rows[0] ?? null;
 }
@@ -84,7 +90,8 @@ export async function failRender(
  */
 export async function retryRender(
   labelId: string,
-  renderId: string
+  renderId: string,
+  createdByUserId?: string
 ): Promise<Render | null> {
   const { rows } = await query<Render>(
     `UPDATE renders r
@@ -92,9 +99,10 @@ export async function retryRender(
            retry_count = retry_count + 1, completed_at = NULL
       FROM batches b
      WHERE r.id = $1 AND r.batch_id = b.id AND b.label_id = $2
+       AND ($4::uuid IS NULL OR b.created_by_user_id = $4)
        AND r.status = 'failed' AND r.retry_count < $3
      RETURNING r.*`,
-    [renderId, labelId, LIMITS.MAX_RENDER_RETRIES]
+    [renderId, labelId, LIMITS.MAX_RENDER_RETRIES, createdByUserId ?? null]
   );
   return rows[0] ?? null;
 }
