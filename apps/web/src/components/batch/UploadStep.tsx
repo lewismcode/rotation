@@ -10,11 +10,59 @@ interface LocalUpload {
   status: "uploading" | "error";
   progress: number; // 0..1
   error?: string;
+  file?: File; // kept on failure so the row can be retried
 }
 
 // How many clips upload to R2 at once. Direct-to-R2 PUTs are independent, so a
 // handful in flight saturates the connection far better than one-at-a-time.
 const UPLOAD_CONCURRENCY = 4;
+
+// Recursively collect File objects from a dropped filesystem entry (a plain
+// file, or a directory the browser exposes via the non-standard-but-ubiquitous
+// webkitGetAsEntry API). Directory reads come back in batches, hence the loop.
+async function readEntry(entry: FileSystemEntry): Promise<File[]> {
+  if (entry.isFile) {
+    return new Promise((resolve) =>
+      (entry as FileSystemFileEntry).file(
+        (f) => resolve([f]),
+        () => resolve([])
+      )
+    );
+  }
+  if (entry.isDirectory) {
+    const reader = (entry as FileSystemDirectoryEntry).createReader();
+    const out: File[] = [];
+    const readBatch = (): Promise<void> =>
+      new Promise((resolve) =>
+        reader.readEntries(
+          async (entries) => {
+            if (!entries.length) return resolve();
+            for (const e of entries) out.push(...(await readEntry(e)));
+            resolve(readBatch());
+          },
+          () => resolve()
+        )
+      );
+    await readBatch();
+    return out;
+  }
+  return [];
+}
+
+// Turn a drop's DataTransfer into a flat File[] — traversing folders when the
+// browser supports it, else falling back to the flat file list.
+async function filesFromDataTransfer(dt: DataTransfer): Promise<File[]> {
+  const items = dt.items;
+  if (items?.length && typeof items[0]?.webkitGetAsEntry === "function") {
+    // Extract entries synchronously — items are invalidated once we await.
+    const entries = Array.from(items)
+      .map((it) => it.webkitGetAsEntry())
+      .filter((e): e is FileSystemEntry => e != null);
+    const nested = await Promise.all(entries.map(readEntry));
+    return nested.flat();
+  }
+  return Array.from(dt.files);
+}
 
 // PUT a file to a presigned URL via XHR so we get real upload progress (fetch
 // can't report request-body progress). Resolves on 2xx, rejects otherwise.
@@ -63,6 +111,7 @@ export function UploadStep({
 }) {
   const [local, setLocal] = useState<LocalUpload[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
 
@@ -107,21 +156,37 @@ export function UploadStep({
       // Row now exists server-side; drop the local placeholder.
       setLocal((l) => l.filter((u) => u.id !== id));
     } catch (err) {
+      // Keep the File on the row so the user can retry without re-adding it.
       setLocal((l) =>
         l.map((u) =>
           u.id === id
-            ? { ...u, status: "error", error: (err as Error).message }
+            ? { ...u, status: "error", error: (err as Error).message, file }
             : u
         )
       );
     }
   }
 
-  async function handleFiles(files: FileList | null) {
-    if (!files) return;
-    const videos = Array.from(files).filter(
+  async function retryUpload(u: LocalUpload) {
+    if (!u.file) return;
+    setLocal((l) => l.filter((x) => x.id !== u.id));
+    await uploadOne(u.file);
+    await onChanged();
+  }
+
+  function dismissUpload(id: string) {
+    setLocal((l) => l.filter((x) => x.id !== id));
+  }
+
+  async function handleFiles(input: File[]) {
+    setNotice(null);
+    const videos = input.filter(
       (f) => f.type.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi)$/i.test(f.name)
     );
+    const skipped = input.length - videos.length;
+    if (skipped > 0) {
+      setNotice(`Skipped ${skipped} non-video file${skipped === 1 ? "" : "s"}.`);
+    }
     if (videos.length === 0) return;
 
     // Upload several at once (bounded) instead of one-at-a-time — this is the
@@ -153,7 +218,7 @@ export function UploadStep({
           onDrop={(e) => {
             e.preventDefault();
             setDragging(false);
-            void handleFiles(e.dataTransfer.files);
+            void filesFromDataTransfer(e.dataTransfer).then(handleFiles);
           }}
           className="grid place-items-center rounded-lg border-2 border-dashed px-6 py-10 text-center transition-colors"
           style={{
@@ -184,7 +249,7 @@ export function UploadStep({
             accept="video/*"
             multiple
             hidden
-            onChange={(e) => void handleFiles(e.target.files)}
+            onChange={(e) => void handleFiles(Array.from(e.target.files ?? []))}
           />
           <input
             ref={folderRef}
@@ -194,10 +259,16 @@ export function UploadStep({
             // @ts-expect-error non-standard but widely supported
             webkitdirectory=""
             directory=""
-            onChange={(e) => void handleFiles(e.target.files)}
+            onChange={(e) => void handleFiles(Array.from(e.target.files ?? []))}
           />
         </div>
       )}
+
+      {notice ? (
+        <p className="text-xs text-secondary" role="status">
+          {notice}
+        </p>
+      ) : null}
 
       <ul className="space-y-2">
         {clips.map((clip) => (
@@ -243,7 +314,24 @@ export function UploadStep({
                   }}
                 />
               </div>
-            ) : null}
+            ) : (
+              <div className="mt-2 flex gap-2">
+                {u.file ? (
+                  <button
+                    onClick={() => void retryUpload(u)}
+                    className="rounded-md border border-border px-2.5 py-1 text-[11px] text-primary hover:border-accent"
+                  >
+                    Retry
+                  </button>
+                ) : null}
+                <button
+                  onClick={() => dismissUpload(u.id)}
+                  className="rounded-md border border-[var(--glass-border)] px-2.5 py-1 text-[11px] text-secondary hover:text-primary"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
           </li>
         ))}
       </ul>
@@ -301,7 +389,7 @@ function ClipRow({
               onClick={() => void onRemove()}
               title="Remove clip"
               aria-label="Remove clip"
-              className="ml-1 grid h-5 w-5 place-items-center rounded-full text-secondary transition-colors hover:bg-[var(--glass-border)] hover:text-[#c0553a]"
+              className="-mr-1 grid h-8 w-8 place-items-center rounded-full text-secondary transition-colors hover:bg-[var(--glass-border)] hover:text-[#c0553a]"
             >
               ×
             </button>
