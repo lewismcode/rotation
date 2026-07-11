@@ -18,6 +18,19 @@ function errTail(stderr: string | null): string {
   return stderr ? `\n${stderr.split("\n").slice(-8).join("\n")}` : "";
 }
 
+// Hard wall-clock cap per encode attempt so a corrupt/pathological input can't
+// wedge a render slot forever. Generous (clips are capped at 180s + veryfast).
+const RENDER_TIMEOUT_MS = Number(process.env.RENDER_TIMEOUT_MS ?? 5 * 60 * 1000);
+
+// Only cycle audio fallbacks (aac -> copy -> none) when the failure actually
+// looks audio-related; a video/decode/filter failure hits every audio mode
+// identically, so retrying them just burns extra full-length encodes.
+function isLikelyAudioError(message: string): boolean {
+  return /audio|aac|\bnone\b|encoder|decoder|codec|-c:a|Invalid data/i.test(
+    message
+  );
+}
+
 /**
  * Single-pass composite. A `-vf` simple filtergraph is used (not
  * -filter_complex) so ffmpeg autorotates the input from its display matrix —
@@ -65,6 +78,10 @@ export async function compositeReel(
         return;
       } catch (err) {
         lastErr = err as Error;
+        // If this isn't an audio failure, the other audio modes will fail the
+        // same way — stop cycling them and move on (to the plain-encode tonemap
+        // fallback, if any).
+        if (!isLikelyAudioError(lastErr.message)) break;
       }
     }
   }
@@ -108,7 +125,7 @@ function run(
   const graph = buildCompositeGraph({ overlayPath, anchor, tonemap });
 
   return new Promise((resolve, reject) => {
-    ffmpeg()
+    const command = ffmpeg()
       .input(inputPath)
       .outputOptions([
         "-vf",
@@ -131,11 +148,23 @@ function run(
         "-movflags",
         "+faststart",
         "-shortest",
-      ])
-      .on("end", () => resolve())
-      .on("error", (err: Error, _o: string | null, stderr: string | null) =>
-        reject(new Error(`${err.message}${errTail(stderr)}`))
-      )
+      ]);
+
+    // Kill a hung/pathological encode so it can't hold a render slot forever.
+    const timer = setTimeout(() => {
+      command.kill("SIGKILL");
+      reject(new Error(`ffmpeg timed out after ${RENDER_TIMEOUT_MS}ms`));
+    }, RENDER_TIMEOUT_MS);
+
+    command
+      .on("end", () => {
+        clearTimeout(timer);
+        resolve();
+      })
+      .on("error", (err: Error, _o: string | null, stderr: string | null) => {
+        clearTimeout(timer);
+        reject(new Error(`${err.message}${errTail(stderr)}`));
+      })
       .save(outputPath);
   });
 }
