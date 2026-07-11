@@ -1,7 +1,8 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { labelsRepo, usersRepo } from "@rotation/db";
+import { labelsRepo, usersRepo, hooksRepo } from "@rotation/db";
+import { STARTER_HOOKS } from "@rotation/shared";
 import type { Label, User } from "@rotation/shared";
 
 export interface RequestContext {
@@ -35,6 +36,8 @@ export const getContext = cache(async (): Promise<RequestContext | null> => {
       displayName: org.name,
       logoUrl: org.imageUrl ?? null,
     });
+    // A brand-new label starts with the editable starter hook library.
+    await hooksRepo.addMissingHooks(label.id, STARTER_HOOKS);
   }
 
   const role = orgRole === "org:admin" ? "admin" : "artist";

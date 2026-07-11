@@ -1,57 +1,56 @@
-import { pool } from "./client.js";
+import { pool, query } from "./client.js";
 import * as labelsRepo from "./repositories/labels.js";
 import * as hooksRepo from "./repositories/hooks.js";
+import { STARTER_HOOKS } from "@rotation/shared";
+import type { Label } from "@rotation/shared";
 
 /**
- * Seeds starter hook examples for a label. In production the label row is
- * auto-provisioned from Clerk on first login; for local dev we ensure a demo
- * label exists so there's something to attach hooks to.
+ * Adds the starter hook library to a label (idempotent — only inserts hooks not
+ * already present, never renames an existing label).
  *
- * Set SEED_CLERK_ORG_ID to point the seed at the real Clerk org id once you've
- * created the org in Clerk. Otherwise a placeholder demo label is used.
- *
- * All hook text is placeholder — clearly marked examples the label will replace.
+ * Target resolution:
+ *   - SEED_CLERK_ORG_ID set  → that org's label (created as a placeholder if
+ *     it doesn't exist yet, for local dev)
+ *   - unset + exactly one label → that label
+ *   - unset + no labels → a demo label (local dev)
+ *   - unset + multiple labels → error (set SEED_CLERK_ORG_ID to choose)
  */
-const STARTER_HOOKS = [
-  "wait for the drop 🔊",
-  "POV: you found your new favorite artist",
-  "nobody is talking about this song",
-  "this is the part that goes crazy",
-  "turn your sound on for this one",
-  "you weren't supposed to hear this yet",
-  "the way this hits different at 2am",
-  "save this before it blows up",
-  "tell me this doesn't give you chills",
-  "run it back one more time",
-  "this loop is dangerously good",
-  "how is this not viral already",
-  "raw take, no autotune",
-  "we made this in one night",
-  "the bridge changes everything",
-];
+async function resolveLabel(): Promise<Label> {
+  const orgId = process.env.SEED_CLERK_ORG_ID;
+  if (orgId) {
+    const existing = await labelsRepo.getLabelByClerkOrg(orgId);
+    if (existing) return existing;
+    return labelsRepo.upsertLabel({
+      clerkOrgId: orgId,
+      name: "Demo Label",
+      displayName: "Demo Label",
+      logoUrl: null,
+    });
+  }
+  const { rows } = await query<Label>(
+    "SELECT * FROM labels ORDER BY created_at ASC"
+  );
+  if (rows.length === 1) return rows[0]!;
+  if (rows.length === 0) {
+    return labelsRepo.upsertLabel({
+      clerkOrgId: "seed-demo-org",
+      name: "Demo Label",
+      displayName: "Demo Label",
+      logoUrl: null,
+    });
+  }
+  throw new Error(
+    `Found ${rows.length} labels — set SEED_CLERK_ORG_ID to choose which one to seed.`
+  );
+}
 
 async function run() {
-  const clerkOrgId = process.env.SEED_CLERK_ORG_ID ?? "seed-demo-org";
-
-  const label = await labelsRepo.upsertLabel({
-    clerkOrgId,
-    name: "Demo Label",
-    displayName: "Demo Label",
-    logoUrl: null,
-  });
-  console.log(`Label ready: ${label.display_name} (${label.id})`);
-
-  const existing = await hooksRepo.listHooks(label.id);
-  if (existing.length > 0) {
-    console.log(`Label already has ${existing.length} hooks — skipping seed.`);
-    await pool().end();
-    return;
-  }
-
-  for (const text of STARTER_HOOKS) {
-    await hooksRepo.createHook({ labelId: label.id, text, createdBy: null });
-  }
-  console.log(`Seeded ${STARTER_HOOKS.length} starter hooks.`);
+  const label = await resolveLabel();
+  const added = await hooksRepo.addMissingHooks(label.id, STARTER_HOOKS);
+  console.log(
+    `Label "${label.display_name}": added ${added.length} starter hooks ` +
+      `(${STARTER_HOOKS.length - added.length} already present).`
+  );
   await pool().end();
 }
 

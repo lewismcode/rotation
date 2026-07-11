@@ -10,6 +10,21 @@ import type { Hook } from "@rotation/shared/types";
 export function HooksAdmin({ initialHooks }: { initialHooks: Hook[] }) {
   const [hooks, setHooks] = useState<Hook[]>(initialHooks);
   const [editing, setEditing] = useState<Hook | "new" | null>(null);
+  const [seeding, setSeeding] = useState(false);
+
+  async function addStarterPack() {
+    setSeeding(true);
+    try {
+      const res = await fetch("/api/hooks/seed-defaults", { method: "POST" });
+      if (res.ok) {
+        const { added } = (await res.json()) as { added: Hook[] };
+        setHooks((h) => [...added, ...h]);
+        if (added.length === 0) alert("All starter hooks are already in your library.");
+      }
+    } finally {
+      setSeeding(false);
+    }
+  }
 
   async function save(text: string, hook: Hook | "new") {
     if (hook === "new") {
@@ -59,12 +74,21 @@ export function HooksAdmin({ initialHooks }: { initialHooks: Hook[] }) {
             Proven-performing captions overlaid onto clips.
           </p>
         </div>
-        <button
-          onClick={() => setEditing("new")}
-          className="rounded-full bg-accent px-4 py-2 font-medium text-[#141310] shadow-lg shadow-[var(--accent-soft)] transition-opacity hover:opacity-90"
-        >
-          Add hook
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={addStarterPack}
+            disabled={seeding}
+            className="rounded-full border border-[var(--glass-border)] px-3.5 py-2 text-sm text-secondary transition-colors hover:border-accent hover:text-primary disabled:opacity-60"
+          >
+            {seeding ? "Adding…" : "Add starter pack"}
+          </button>
+          <button
+            onClick={() => setEditing("new")}
+            className="rounded-full bg-accent px-4 py-2 font-medium text-[#141310] shadow-lg shadow-[var(--accent-soft)] transition-opacity hover:opacity-90"
+          >
+            Add hook
+          </button>
+        </div>
       </div>
 
       {hooks.length === 0 ? (

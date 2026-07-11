@@ -48,6 +48,27 @@ export async function createHook(input: {
   return rows[0]!;
 }
 
+/**
+ * Insert any of `texts` the label doesn't already have (matched by trimmed
+ * text). Idempotent — safe to call repeatedly. Returns the newly created hooks.
+ */
+export async function addMissingHooks(
+  labelId: string,
+  texts: string[],
+  createdBy: string | null = null
+): Promise<Hook[]> {
+  const existing = await listHooks(labelId);
+  const have = new Set(existing.map((h) => h.text.trim()));
+  const created: Hook[] = [];
+  for (const text of texts) {
+    const t = text.trim();
+    if (!t || have.has(t)) continue;
+    created.push(await createHook({ labelId, text: t, createdBy }));
+    have.add(t);
+  }
+  return created;
+}
+
 export async function updateHook(
   labelId: string,
   id: string,
