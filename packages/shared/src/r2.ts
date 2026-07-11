@@ -24,6 +24,13 @@ export function r2(): S3Client {
       accessKeyId: env.R2_ACCESS_KEY_ID,
       secretAccessKey: env.R2_SECRET_ACCESS_KEY,
     },
+    // AWS SDK v3 now injects an automatic CRC32 checksum
+    // (x-amz-checksum-crc32 / x-amz-sdk-checksum-algorithm) into requests and
+    // presigned URLs. Cloudflare R2 (and other S3-compatible stores) reject or
+    // hang browser PUTs whose real body doesn't match that pre-signed, empty
+    // checksum. Only add checksums when the operation actually requires them.
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
   return client;
 }
