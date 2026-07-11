@@ -59,6 +59,28 @@ export interface ProbeResult {
   durationSeconds: number;
   /** Clockwise rotation to apply for correct display: 0 | 90 | 180 | 270. */
   rotation: number;
+  /** color_transfer (e.g. smpte2084, arib-std-b67) — used for HDR detection. */
+  colorTransfer: string | null;
+  /** color_primaries (e.g. bt2020) — used for HDR detection. */
+  colorPrimaries: string | null;
+}
+
+/**
+ * HDR footage (iPhone Dolby Vision / HDR10, HLG) uses a PQ or HLG transfer
+ * curve and/or BT.2020 primaries. Encoded to SDR H.264 without tone-mapping it
+ * comes out washed-out and grey, so this flags clips that need the tonemap path.
+ */
+export function isHdr(res: {
+  colorTransfer: string | null;
+  colorPrimaries: string | null;
+}): boolean {
+  const t = res.colorTransfer?.toLowerCase();
+  const p = res.colorPrimaries?.toLowerCase();
+  return (
+    t === "smpte2084" || // PQ / HDR10 / Dolby Vision
+    t === "arib-std-b67" || // HLG
+    p === "bt2020"
+  );
 }
 
 /**
@@ -72,6 +94,8 @@ interface FfprobeStreamJson {
   width?: number;
   height?: number;
   duration?: string;
+  color_transfer?: string;
+  color_primaries?: string;
   tags?: { rotate?: string | number };
   side_data_list?: Array<{ rotation?: number }>;
 }
@@ -117,5 +141,7 @@ export async function probeFile(path: string): Promise<ProbeResult> {
     height: stream.height,
     durationSeconds: Number.isFinite(duration) ? duration : 0,
     rotation: readRotation(stream),
+    colorTransfer: stream.color_transfer ?? null,
+    colorPrimaries: stream.color_primaries ?? null,
   };
 }

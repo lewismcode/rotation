@@ -8,6 +8,7 @@ import {
 } from "@rotation/shared";
 import { readFile } from "node:fs/promises";
 import { compositeReel, extractThumbnail } from "../composite.js";
+import { probeFile, isHdr } from "../ffmpeg.js";
 import { renderHookPng } from "../overlay/renderHookPng.js";
 import {
   withTmpDir,
@@ -61,12 +62,14 @@ export async function processRender(job: RenderJob): Promise<void> {
 
       // 1. source
       await streamToFile(await getObjectStream(clip.r2_key_original), inPath);
+      // 1b. detect HDR (PQ/HLG/BT.2020) so we can tone-map to SDR
+      const hdr = isHdr(await probeFile(inPath));
       // 2. caption overlay (per-render caption style)
       await bufferToFile(renderHookPng(hook.text, render.caption_style), pngPath);
-      // 3. composite + encode (honoring the clip's manual crop anchor)
+      // 3. composite + encode (honoring the clip's manual crop anchor + HDR)
       await compositeReel(inPath, pngPath, outPath, {
-        x: clip.crop_anchor_x,
-        y: clip.crop_anchor_y,
+        anchor: { x: clip.crop_anchor_x, y: clip.crop_anchor_y },
+        hdr,
       });
       // 4. upload output
       await putObject(outKey, await readFile(outPath), "video/mp4");

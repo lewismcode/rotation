@@ -43,22 +43,38 @@ export interface CropAnchor {
   y: number;
 }
 
+export interface CompositeOptions {
+  anchor?: CropAnchor;
+  /** Source is HDR (PQ/HLG/BT.2020) — tone-map to SDR before encoding. */
+  hdr?: boolean;
+}
+
 export async function compositeReel(
   inputPath: string,
   overlayPath: string,
   outputPath: string,
-  anchor: CropAnchor = { x: 0.5, y: 0.5 }
+  options: CompositeOptions = {}
 ): Promise<void> {
+  const anchor = options.anchor ?? { x: 0.5, y: 0.5 };
+  // Try the tonemap path first for HDR sources; if the build lacks zscale/zimg
+  // (or the chain otherwise errors) fall back to a plain encode so the render
+  // still succeeds — a slightly-washed SDR reel beats no reel.
+  const tonemapModes = options.hdr ? [true, false] : [false];
   let lastErr: Error | null = null;
-  for (const mode of ["aac", "copy", "none"] as AudioMode[]) {
-    try {
-      await run(inputPath, overlayPath, outputPath, mode, anchor);
-      if (mode !== "aac") {
-        console.log(`[render] audio fallback used: ${mode} (${inputPath})`);
+  for (const tonemap of tonemapModes) {
+    for (const mode of ["aac", "copy", "none"] as AudioMode[]) {
+      try {
+        await run(inputPath, overlayPath, outputPath, mode, anchor, tonemap);
+        if (mode !== "aac") {
+          console.log(`[render] audio fallback used: ${mode} (${inputPath})`);
+        }
+        if (options.hdr && !tonemap) {
+          console.warn(`[render] HDR tonemap unavailable, plain encode (${inputPath})`);
+        }
+        return;
+      } catch (err) {
+        lastErr = err as Error;
       }
-      return;
-    } catch (err) {
-      lastErr = err as Error;
     }
   }
   throw lastErr ?? new Error("ffmpeg composite failed");
@@ -96,12 +112,19 @@ function anchorExpr(v: number): string {
   return Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0.5)).toFixed(4);
 }
 
+// HDR (PQ/HLG, BT.2020) -> SDR (BT.709). Linearize, tone-map highlights with
+// Hable, then convert back to bt709 tv-range before the normal scale/crop.
+const TONEMAP =
+  "zscale=t=linear:npl=100,tonemap=tonemap=hable:desat=0," +
+  "zscale=t=bt709:m=bt709:p=bt709:r=tv,";
+
 function run(
   inputPath: string,
   overlayPath: string,
   outputPath: string,
   audioMode: AudioMode,
-  anchor: CropAnchor
+  anchor: CropAnchor,
+  tonemap: boolean
 ): Promise<void> {
   const { WIDTH, HEIGHT } = REELS;
   // After scaling to cover 1080x1920, exactly one axis overflows; the crop x/y
@@ -110,6 +133,7 @@ function run(
   const ax = anchorExpr(anchor.x);
   const ay = anchorExpr(anchor.y);
   const graph =
+    `${tonemap ? TONEMAP : ""}` +
     `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
     `crop=${WIDTH}:${HEIGHT}:(iw-${WIDTH})*${ax}:(ih-${HEIGHT})*${ay},` +
     `format=yuv420p,setsar=1[b];` +
