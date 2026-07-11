@@ -25,8 +25,8 @@ export default async function AppLayout({
     <div className="min-h-screen text-primary">
       <header className="sticky top-0 z-30 px-3 pt-3 sm:px-5 sm:pt-4">
         <div className="glass-strong mx-auto flex h-14 max-w-5xl items-center justify-between rounded-2xl px-4">
-          <div className="flex items-center gap-2 sm:gap-5">
-            <Link href="/dashboard" className="flex items-center gap-2.5">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-5">
+            <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
               {ctx.label.logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -52,7 +52,7 @@ export default async function AppLayout({
             </Link>
             <NavLinks isAdmin={isAdmin} />
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex shrink-0 items-center gap-2.5 pl-2">
             <ThemeToggle />
             <UserButton appearance={{ elements: { avatarBox: "h-7 w-7" } }} />
           </div>
