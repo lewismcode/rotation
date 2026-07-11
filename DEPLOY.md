@@ -117,6 +117,22 @@ or set `FONT_PATH`.
 > fontconfig, or an emoji-font fallback added to the overlay module. Plain-text
 > hooks render fine without it.
 
+## Scaling render throughput
+
+Renders are independent jobs on a shared Redis (BullMQ) queue, so the worker
+scales horizontally with no code changes:
+
+- **More instances:** Worker service → Settings → **Replicas** = N. Every
+  replica pulls from the same queue; BullMQ locks each job so none runs twice.
+  A batch's renders fan out across all replicas.
+- **Per-instance parallelism:** `RENDER_CONCURRENCY` (default 2) — set it near
+  the instance's vCPU count.
+- **Total parallel renders ≈ replicas × RENDER_CONCURRENCY.**
+- The retention-purge job is deduped centrally, so extra replicas don't
+  double-purge. Give every worker replica the same env vars (they share the
+  service config automatically on Railway).
+- Faster per render: `X264_PRESET=ultrafast` (larger files) or keep `veryfast`.
+
 ## Notes / caveats
 
 - Both services install the full workspace at build (`npm install` in the root
