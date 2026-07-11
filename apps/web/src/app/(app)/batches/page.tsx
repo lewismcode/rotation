@@ -1,10 +1,9 @@
-import Link from "next/link";
 import { batchesRepo } from "@rotation/db";
 import { batchDisplayName } from "@rotation/shared";
 import { requireContextOrRedirect } from "@/lib/context";
 import { creatorScope } from "@/lib/scope";
 import { NewBatchButton } from "@/components/NewBatchButton";
-import { StatusPill } from "@/components/StatusPill";
+import { BatchCard } from "@/components/BatchCard";
 
 export const dynamic = "force-dynamic";
 
@@ -40,20 +39,12 @@ export default async function BatchesPage() {
         <ul className="rise grid gap-3 sm:grid-cols-2">
           {batches.map((b) => (
             <li key={b.id}>
-              <Link
-                href={`/batches/${b.id}`}
-                className="glass glass-hover flex items-center justify-between rounded-2xl px-5 py-4"
-              >
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-primary">
-                    {batchDisplayName(b)}
-                  </span>
-                  <span className="data text-xs text-faint">
-                    {new Date(b.created_at).toLocaleString()}
-                  </span>
-                </div>
-                <StatusPill status={b.status} />
-              </Link>
+              <BatchCard
+                id={b.id}
+                title={batchDisplayName(b)}
+                createdAt={b.created_at}
+                status={b.status}
+              />
             </li>
           ))}
         </ul>

@@ -5,6 +5,7 @@ import type { Batch, Clip, Render, Hook } from "@rotation/shared/types";
 import type { CaptionStyle } from "@rotation/shared/caption-styles";
 import { StepShell, type StepState } from "./StepShell";
 import { BatchNameEditor } from "./BatchNameEditor";
+import { DeleteBatchButton } from "./DeleteBatchButton";
 import { UploadStep } from "./UploadStep";
 import { HooksStep } from "./HooksStep";
 import { RenderGrid } from "./RenderGrid";
@@ -96,15 +97,18 @@ export function BatchFlow({
 
   return (
     <div className="mx-auto max-w-2xl space-y-3">
-      <div className="rise mb-6">
-        <BatchNameEditor
-          batchId={detail.batch.id}
-          name={detail.batch.name}
-          labelSeq={detail.batch.label_seq}
-        />
-        <p className="data mt-1 text-xs text-faint">
-          {new Date(detail.batch.created_at).toLocaleString()}
-        </p>
+      <div className="rise mb-6 flex items-start justify-between gap-3">
+        <div>
+          <BatchNameEditor
+            batchId={detail.batch.id}
+            name={detail.batch.name}
+            labelSeq={detail.batch.label_seq}
+          />
+          <p className="data mt-1 text-xs text-faint">
+            {new Date(detail.batch.created_at).toLocaleString()}
+          </p>
+        </div>
+        <DeleteBatchButton batchId={detail.batch.id} />
       </div>
 
       {/* Step 1 — Upload */}

@@ -57,4 +57,10 @@ export const QUEUE = {
   PROBE: "rotation-probe",
   RENDER: "rotation-render",
   ZIP: "rotation-zip",
+  PURGE: "rotation-purge",
 } as const;
+
+/** Archived batches/clips are hard-deleted (R2 + rows) after this many days. */
+export const ARCHIVE_RETENTION_DAYS = Number(
+  process.env.ARCHIVE_RETENTION_DAYS ?? 30
+);

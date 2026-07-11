@@ -40,3 +40,18 @@ export const PATCH = apiHandler(
     return NextResponse.json({ batch });
   }
 );
+
+// Archive (soft-delete) a batch. Files are retained until the retention purge.
+export const DELETE = apiHandler(
+  async (_req: Request, { params }: { params: Promise<{ id: string }> }) => {
+    const ctx = await requireContext();
+    const { id } = await params;
+    const batch = await batchesRepo.archiveBatch(
+      ctx.label.id,
+      id,
+      creatorScope(ctx)
+    );
+    if (!batch) notFound("Batch not found");
+    return NextResponse.json({ ok: true });
+  }
+);

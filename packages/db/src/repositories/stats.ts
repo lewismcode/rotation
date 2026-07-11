@@ -39,15 +39,19 @@ export async function getDashboard(
   }>(
     `SELECT
        (SELECT count(*) FROM renders r JOIN batches b ON b.id = r.batch_id
-          WHERE b.label_id = $1 AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
+          WHERE b.label_id = $1 AND b.archived_at IS NULL
+            AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
             AND r.status = 'complete') AS reels,
        (SELECT count(*) FROM renders r JOIN batches b ON b.id = r.batch_id
-          WHERE b.label_id = $1 AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
+          WHERE b.label_id = $1 AND b.archived_at IS NULL
+            AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
             AND r.status IN ('queued','processing')) AS in_progress,
        (SELECT count(*) FROM batches
-          WHERE label_id = $1 AND ($2::uuid IS NULL OR created_by_user_id = $2)) AS batches,
+          WHERE label_id = $1 AND archived_at IS NULL
+            AND ($2::uuid IS NULL OR created_by_user_id = $2)) AS batches,
        (SELECT count(*) FROM clips c JOIN batches b ON b.id = c.batch_id
-          WHERE b.label_id = $1 AND ($2::uuid IS NULL OR b.created_by_user_id = $2)) AS clips,
+          WHERE b.label_id = $1 AND b.archived_at IS NULL AND c.archived_at IS NULL
+            AND ($2::uuid IS NULL OR b.created_by_user_id = $2)) AS clips,
        (SELECT count(*) FROM hooks WHERE label_id = $1 AND is_active) AS active_hooks`,
     [labelId, uid]
   );
@@ -68,7 +72,8 @@ export async function getDashboard(
        (SELECT count(*) FROM renders r WHERE r.batch_id = b.id AND r.status = 'complete')
          AS render_complete
      FROM batches b
-     WHERE b.label_id = $1 AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
+     WHERE b.label_id = $1 AND b.archived_at IS NULL
+       AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
      ORDER BY b.created_at DESC
      LIMIT 5`,
     [labelId, uid]
@@ -79,7 +84,7 @@ export async function getDashboard(
      FROM hooks h
      JOIN renders r ON r.hook_id = h.id
      JOIN batches b ON b.id = r.batch_id
-     WHERE h.label_id = $1 AND b.label_id = $1
+     WHERE h.label_id = $1 AND b.label_id = $1 AND b.archived_at IS NULL
        AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
      GROUP BY h.id, h.text
      ORDER BY uses DESC
@@ -136,7 +141,7 @@ export async function getRoster(labelId: string): Promise<RosterRow[]> {
         count(r.id) FILTER (WHERE r.status = 'complete') AS reels,
         max(b.created_at) AS last_active
      FROM users u
-       LEFT JOIN batches b ON b.created_by_user_id = u.id
+       LEFT JOIN batches b ON b.created_by_user_id = u.id AND b.archived_at IS NULL
        LEFT JOIN renders r ON r.batch_id = b.id
      WHERE u.label_id = $1
      GROUP BY u.id
@@ -169,7 +174,7 @@ export async function getActivity(
        LEFT JOIN (
          SELECT date_trunc('day', r.completed_at) AS day, count(*) AS cnt
          FROM renders r JOIN batches b ON b.id = r.batch_id
-         WHERE b.label_id = $1 AND r.status = 'complete'
+         WHERE b.label_id = $1 AND b.archived_at IS NULL AND r.status = 'complete'
            AND ($3::uuid IS NULL OR b.created_by_user_id = $3)
          GROUP BY 1
        ) x ON x.day = d
@@ -187,7 +192,8 @@ export async function getStyleBreakdown(
   const { rows } = await query<{ style: string; count: string }>(
     `SELECT r.caption_style AS style, count(*) AS count
      FROM renders r JOIN batches b ON b.id = r.batch_id
-     WHERE b.label_id = $1 AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
+     WHERE b.label_id = $1 AND b.archived_at IS NULL
+       AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
      GROUP BY r.caption_style
      ORDER BY count DESC`,
     [labelId, createdByUserId ?? null]

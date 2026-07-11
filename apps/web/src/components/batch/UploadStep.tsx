@@ -155,7 +155,15 @@ export function UploadStep({
 
       <ul className="space-y-2">
         {clips.map((clip) => (
-          <ClipRow key={clip.id} clip={clip} />
+          <ClipRow
+            key={clip.id}
+            clip={clip}
+            removable={!locked}
+            onRemove={async () => {
+              await fetch(`/api/clips/${clip.id}`, { method: "DELETE" });
+              await onChanged();
+            }}
+          />
         ))}
         {local.map((u) => (
           <li
@@ -185,7 +193,15 @@ export function UploadStep({
   );
 }
 
-function ClipRow({ clip }: { clip: Clip }) {
+function ClipRow({
+  clip,
+  removable,
+  onRemove,
+}: {
+  clip: Clip;
+  removable: boolean;
+  onRemove: () => void | Promise<void>;
+}) {
   const status =
     clip.status === "ready"
       ? clip.needs_resize
@@ -193,7 +209,7 @@ function ClipRow({ clip }: { clip: Clip }) {
         : "ready"
       : clip.status;
   return (
-    <li className="rounded-md border border-border bg-bg/30 px-3 py-2">
+    <li className="rounded-md border border-[var(--glass-border)] bg-bg/30 px-3 py-2">
       <div className="flex items-center justify-between gap-3">
         <span className="data truncate text-sm text-primary">
           {clip.original_filename}
@@ -206,6 +222,16 @@ function ClipRow({ clip }: { clip: Clip }) {
           ) : null}
           <StatusDot clip={clip} />
           <span className="data text-xs text-secondary">{status}</span>
+          {removable ? (
+            <button
+              onClick={() => void onRemove()}
+              title="Remove clip"
+              aria-label="Remove clip"
+              className="ml-1 grid h-5 w-5 place-items-center rounded-full text-secondary transition-colors hover:bg-[var(--glass-border)] hover:text-[#c0553a]"
+            >
+              ×
+            </button>
+          ) : null}
         </span>
       </div>
       {clip.status === "ready" && clip.needs_resize ? (

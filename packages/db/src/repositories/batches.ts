@@ -30,7 +30,7 @@ export async function getBatch(
 ): Promise<Batch | null> {
   const { rows } = await query<Batch>(
     `SELECT * FROM batches
-     WHERE id = $1 AND label_id = $2
+     WHERE id = $1 AND label_id = $2 AND archived_at IS NULL
        AND ($3::uuid IS NULL OR created_by_user_id = $3)`,
     [id, labelId, scope.createdByUserId ?? null]
   );
@@ -43,12 +43,62 @@ export async function listBatches(
 ): Promise<Batch[]> {
   const { rows } = await query<Batch>(
     `SELECT * FROM batches
-     WHERE label_id = $1
+     WHERE label_id = $1 AND archived_at IS NULL
        AND ($2::uuid IS NULL OR created_by_user_id = $2)
      ORDER BY created_at DESC LIMIT 50`,
     [labelId, scope.createdByUserId ?? null]
   );
   return rows;
+}
+
+/** Soft-delete: hide the batch; R2 objects retained until the retention purge. */
+export async function archiveBatch(
+  labelId: string,
+  id: string,
+  scope: CreatorScope = {}
+): Promise<Batch | null> {
+  const { rows } = await query<Batch>(
+    `UPDATE batches SET archived_at = now()
+     WHERE id = $1 AND label_id = $2 AND archived_at IS NULL
+       AND ($3::uuid IS NULL OR created_by_user_id = $3)
+     RETURNING *`,
+    [id, labelId, scope.createdByUserId ?? null]
+  );
+  return rows[0] ?? null;
+}
+
+/** Un-archive within the retention window. */
+export async function restoreBatch(
+  labelId: string,
+  id: string,
+  scope: CreatorScope = {}
+): Promise<Batch | null> {
+  const { rows } = await query<Batch>(
+    `UPDATE batches SET archived_at = NULL
+     WHERE id = $1 AND label_id = $2 AND archived_at IS NOT NULL
+       AND ($3::uuid IS NULL OR created_by_user_id = $3)
+     RETURNING *`,
+    [id, labelId, scope.createdByUserId ?? null]
+  );
+  return rows[0] ?? null;
+}
+
+/** Batches archived longer than the retention window — ready to hard-delete. */
+export async function listExpiredArchivedBatches(
+  retentionDays: number
+): Promise<Array<{ id: string; label_id: string }>> {
+  const { rows } = await query<{ id: string; label_id: string }>(
+    `SELECT id, label_id FROM batches
+     WHERE archived_at IS NOT NULL
+       AND archived_at < now() - ($1::int || ' days')::interval`,
+    [retentionDays]
+  );
+  return rows;
+}
+
+/** Hard delete (cascades clips + renders). Used only by the retention purge. */
+export async function hardDeleteBatch(id: string): Promise<void> {
+  await query("DELETE FROM batches WHERE id = $1", [id]);
 }
 
 export async function renameBatch(

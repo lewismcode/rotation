@@ -89,3 +89,12 @@ export async function listCompleteRenders(batchId: string): Promise<Render[]> {
   );
   return rows;
 }
+
+/** All output R2 keys for a batch — for the retention purge. */
+export async function listOutputKeys(batchId: string): Promise<string[]> {
+  const { rows } = await query<{ r2_key_output: string }>(
+    "SELECT r2_key_output FROM renders WHERE batch_id = $1 AND r2_key_output IS NOT NULL",
+    [batchId]
+  );
+  return rows.map((r) => r.r2_key_output);
+}

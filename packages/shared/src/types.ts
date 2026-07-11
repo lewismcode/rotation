@@ -47,6 +47,7 @@ export interface Batch {
   status: BatchStatus;
   name: string | null;
   label_seq: number | null;
+  archived_at: string | null;
   created_at: string;
 }
 
@@ -70,6 +71,7 @@ export interface Clip {
   duration_seconds: number | null;
   needs_resize: boolean;
   status: ClipStatus;
+  archived_at: string | null;
   created_at: string;
 }
 

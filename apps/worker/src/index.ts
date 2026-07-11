@@ -1,5 +1,5 @@
 import express from "express";
-import { Worker } from "bullmq";
+import { Worker, Queue } from "bullmq";
 import { connection } from "@rotation/queue";
 import {
   QUEUE,
@@ -10,6 +10,7 @@ import {
 import { processProbe } from "./processors/probe.js";
 import { processRender } from "./processors/render.js";
 import { processZip } from "./processors/zip.js";
+import { processPurge } from "./processors/purge.js";
 
 /**
  * The worker is a long-running process (Railway service, not serverless) that
@@ -42,10 +43,31 @@ const zipWorker = new Worker<ZipJob>(
   { connection: conn, concurrency: 1 }
 );
 
+// Retention purge: a repeatable job (deduped centrally by BullMQ, so multiple
+// worker replicas don't double-run it) every 12h, plus one run at startup.
+const purgeWorker = new Worker(
+  QUEUE.PURGE,
+  async () => processPurge(),
+  { connection: conn, concurrency: 1 }
+);
+const purgeQueue = new Queue(QUEUE.PURGE, { connection: conn });
+void purgeQueue
+  .add("purge", {}, {
+    repeat: { every: 12 * 60 * 60 * 1000 },
+    jobId: "purge-cycle",
+    removeOnComplete: true,
+    removeOnFail: true,
+  })
+  .catch((err) => console.error("[purge] schedule failed:", err?.message));
+void purgeQueue
+  .add("purge-startup", {}, { removeOnComplete: true, removeOnFail: true })
+  .catch(() => {});
+
 for (const [name, w] of [
   ["probe", probeWorker],
   ["render", renderWorker],
   ["zip", zipWorker],
+  ["purge", purgeWorker],
 ] as const) {
   w.on("failed", (job, err) =>
     console.error(`[${name}] job ${job?.id} failed:`, err?.message)
@@ -64,6 +86,7 @@ async function shutdown() {
     probeWorker.close(),
     renderWorker.close(),
     zipWorker.close(),
+    purgeWorker.close(),
   ]);
   process.exit(0);
 }
