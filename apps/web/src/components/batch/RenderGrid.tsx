@@ -197,8 +197,10 @@ function RetryButton({
   onRetried?: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   async function retry() {
     setBusy(true);
+    setErr(null);
     try {
       const res = await fetch(`/api/renders/${renderId}/retry`, {
         method: "POST",
@@ -208,8 +210,8 @@ function RetryButton({
         throw new Error(error || "Retry failed");
       }
       onRetried?.();
-    } catch (err) {
-      alert((err as Error).message);
+    } catch (e) {
+      setErr((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -218,9 +220,14 @@ function RetryButton({
     <button
       onClick={retry}
       disabled={busy}
-      className="shrink-0 rounded-md border border-border px-3 py-1 text-xs text-primary hover:border-accent disabled:opacity-50"
+      title={err ?? undefined}
+      className={`shrink-0 rounded-md border px-3 py-1 text-xs disabled:opacity-50 ${
+        err
+          ? "border-[#c0553a] text-[#c0553a]"
+          : "border-border text-primary hover:border-accent"
+      }`}
     >
-      {busy ? "…" : "Retry"}
+      {busy ? "…" : err ? "Try again" : "Retry"}
     </button>
   );
 }

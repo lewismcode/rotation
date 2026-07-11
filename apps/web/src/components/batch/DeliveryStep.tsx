@@ -96,15 +96,17 @@ export function DeliveryStep({
 
 function DownloadButton({ renderId }: { renderId: string }) {
   const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
   async function download() {
     setLoading(true);
+    setErr(null);
     try {
       const res = await fetch(`/api/renders/${renderId}/download`);
       if (!res.ok) throw new Error("Could not get link");
       const { url } = await res.json();
       window.location.href = url;
-    } catch (err) {
-      alert((err as Error).message);
+    } catch (e) {
+      setErr((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -113,9 +115,14 @@ function DownloadButton({ renderId }: { renderId: string }) {
     <button
       onClick={download}
       disabled={loading}
-      className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs text-primary hover:border-accent disabled:opacity-50"
+      title={err ?? undefined}
+      className={`shrink-0 rounded-md border px-3 py-1.5 text-xs disabled:opacity-50 ${
+        err
+          ? "border-[#c0553a] text-[#c0553a]"
+          : "border-border text-primary hover:border-accent"
+      }`}
     >
-      {loading ? "…" : "Download"}
+      {loading ? "…" : err ? "Retry" : "Download"}
     </button>
   );
 }

@@ -11,24 +11,31 @@ export function DeleteBatchButton({ batchId }: { batchId: string }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   async function del() {
     setBusy(true);
+    setErr(null);
     try {
       const res = await fetch(`/api/batches/${batchId}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Could not delete batch");
       router.push("/batches");
       router.refresh();
-    } catch (err) {
+    } catch (e) {
       setBusy(false);
-      alert((err as Error).message);
+      setErr((e as Error).message);
     }
   }
 
   if (confirming) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-xs text-secondary">Delete this batch?</span>
+        <span
+          className="text-xs"
+          style={{ color: err ? "#c0553a" : "var(--text-secondary)" }}
+        >
+          {err ?? "Delete this batch?"}
+        </span>
         <button
           onClick={del}
           disabled={busy}
