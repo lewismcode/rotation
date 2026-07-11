@@ -3,6 +3,22 @@
 @tailwind utilities;
 
 /*
+ * Caption-style preview fonts — the same TTFs the worker renders with, self
+ * hosted (no CDN) so the style picker previews each style in its real face.
+ */
+@font-face { font-family: "RotationPoster"; src: url("/fonts/Poster.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "RotationClassic"; src: url("/fonts/Classic.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "RotationStrong"; src: url("/fonts/Strong.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "RotationModern"; src: url("/fonts/Modern.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "RotationBubble"; src: url("/fonts/Bubble.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "RotationDeco"; src: url("/fonts/Deco.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "RotationSqueeze"; src: url("/fonts/Squeeze.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "RotationNeon"; src: url("/fonts/Neon.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "RotationTypewriter"; src: url("/fonts/Typewriter.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "RotationSignature"; src: url("/fonts/Signature.ttf") format("truetype"); font-display: swap; }
+@font-face { font-family: "RotationEditor"; src: url("/fonts/Editor.ttf") format("truetype"); font-display: swap; }
+
+/*
  * Design tokens. Dark is the default; light overrides via [data-theme="light"].
  * Values come straight from the build spec. Later, per-label theming can
  * override these same variables from the label record.

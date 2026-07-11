@@ -68,6 +68,7 @@ export interface Render {
   hook_id: string;
   r2_key_output: string | null;
   status: RenderStatus;
+  caption_style: string;
   error_message: string | null;
   created_at: string;
   completed_at: string | null;

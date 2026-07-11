@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import type { Hook } from "@rotation/shared/types";
+import {
+  DEFAULT_CAPTION_STYLE,
+  type CaptionStyle,
+} from "@rotation/shared/caption-styles";
+import { CaptionStylePicker } from "./CaptionStylePicker";
 
 /**
  * Multi-select the hooks to overlay. Shows the exact fan-out count before the
@@ -14,6 +19,7 @@ export function HooksStep({
   clipCount,
   locked,
   selectedHookIds,
+  confirmedStyle,
   onConfirmed,
 }: {
   batchId: string;
@@ -21,10 +27,14 @@ export function HooksStep({
   clipCount: number;
   locked: boolean;
   selectedHookIds: string[];
+  confirmedStyle?: CaptionStyle;
   onConfirmed: () => Promise<void> | void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(
     new Set(selectedHookIds)
+  );
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>(
+    confirmedStyle ?? DEFAULT_CAPTION_STYLE
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +58,7 @@ export function HooksStep({
       const res = await fetch(`/api/batches/${batchId}/confirm`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hookIds: Array.from(selected) }),
+        body: JSON.stringify({ hookIds: Array.from(selected), captionStyle }),
       });
       if (!res.ok) {
         const { error } = await res.json().catch(() => ({}));
@@ -106,6 +116,12 @@ export function HooksStep({
           );
         })}
       </ul>
+
+      <CaptionStylePicker
+        value={captionStyle}
+        onChange={setCaptionStyle}
+        locked={locked}
+      />
 
       <div className="flex items-center justify-between rounded-md border border-border bg-bg/30 px-3 py-2.5">
         <span className="data text-sm text-secondary">

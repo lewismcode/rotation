@@ -57,8 +57,8 @@ export async function processRender(job: RenderJob): Promise<void> {
 
       // 1. source
       await streamToFile(await getObjectStream(clip.r2_key_original), inPath);
-      // 2. caption overlay
-      await bufferToFile(renderHookPng(hook.text), pngPath);
+      // 2. caption overlay (per-render caption style)
+      await bufferToFile(renderHookPng(hook.text, render.caption_style), pngPath);
       // 3. composite + encode
       await compositeReel(inPath, pngPath, outPath);
       // 4. upload

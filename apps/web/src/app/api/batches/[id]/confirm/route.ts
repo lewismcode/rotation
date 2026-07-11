@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { batchesRepo, clipsRepo, hooksRepo, rendersRepo } from "@rotation/db";
 import { enqueueRenders } from "@rotation/queue";
-import { LIMITS } from "@rotation/shared";
+import { LIMITS, CAPTION_STYLE_IDS, DEFAULT_CAPTION_STYLE } from "@rotation/shared";
 import { requireContext } from "@/lib/context";
 import { apiHandler, notFound, badRequest } from "@/lib/api";
 
@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 
 const bodySchema = z.object({
   hookIds: z.array(z.string().uuid()).min(1).max(LIMITS.MAX_HOOKS_PER_BATCH),
+  captionStyle: z.enum(CAPTION_STYLE_IDS).default(DEFAULT_CAPTION_STYLE),
 });
 
 /**
@@ -26,7 +27,7 @@ export const POST = apiHandler(
     const batch = await batchesRepo.getBatch(ctx.label.id, batchId);
     if (!batch) notFound("Batch not found");
 
-    const { hookIds } = bodySchema.parse(await req.json());
+    const { hookIds, captionStyle } = bodySchema.parse(await req.json());
 
     const clips = (await clipsRepo.listClips(batchId)).filter(
       (c) => c.status === "ready"
@@ -50,7 +51,7 @@ export const POST = apiHandler(
       hooks.map((hook) => ({ clipId: clip.id, hookId: hook.id }))
     );
 
-    const created = await rendersRepo.createRenders(batchId, pairs);
+    const created = await rendersRepo.createRenders(batchId, pairs, captionStyle);
     await batchesRepo.setBatchStatus(ctx.label.id, batchId, "processing");
 
     await enqueueRenders(

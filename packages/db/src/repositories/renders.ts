@@ -8,18 +8,19 @@ import type { Render, RenderStatus } from "@rotation/shared";
  */
 export async function createRenders(
   batchId: string,
-  pairs: Array<{ clipId: string; hookId: string }>
+  pairs: Array<{ clipId: string; hookId: string }>,
+  captionStyle = "poster"
 ): Promise<Render[]> {
   if (pairs.length === 0) return [];
   return tx(async (client) => {
     const created: Render[] = [];
     for (const { clipId, hookId } of pairs) {
       const { rows } = await client.query<Render>(
-        `INSERT INTO renders (batch_id, clip_id, hook_id, status)
-         VALUES ($1, $2, $3, 'queued')
+        `INSERT INTO renders (batch_id, clip_id, hook_id, status, caption_style)
+         VALUES ($1, $2, $3, 'queued', $4)
          ON CONFLICT (batch_id, clip_id, hook_id) DO NOTHING
          RETURNING *`,
-        [batchId, clipId, hookId]
+        [batchId, clipId, hookId, captionStyle]
       );
       if (rows[0]) created.push(rows[0]);
     }

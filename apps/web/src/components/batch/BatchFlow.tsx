@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Batch, Clip, Render, Hook } from "@rotation/shared/types";
+import type { CaptionStyle } from "@rotation/shared/caption-styles";
 import { StepShell, type StepState } from "./StepShell";
 import { UploadStep } from "./UploadStep";
 import { HooksStep } from "./HooksStep";
@@ -139,6 +140,9 @@ export function BatchFlow({
           clipCount={readyClips.length}
           locked={confirmed}
           selectedHookIds={selectedHookIds}
+          confirmedStyle={
+            detail.renders[0]?.caption_style as CaptionStyle | undefined
+          }
           onConfirmed={refetch}
         />
       </StepShell>

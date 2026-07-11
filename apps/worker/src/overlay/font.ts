@@ -1,64 +1,67 @@
 import { GlobalFonts } from "@napi-rs/canvas";
-import { existsSync } from "node:fs";
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CAPTION_STYLES } from "@rotation/shared";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const STYLES_DIR = join(__dirname, "..", "..", "assets", "fonts", "styles");
+const BASE_DIR = join(__dirname, "..", "..", "assets", "fonts");
+
+/** Generic fallback family, used if a style's own font file is missing. */
+export const FALLBACK_FAMILY = "RotationFallback";
+
+let ready = false;
+const registered = new Set<string>();
 
 /**
- * The overlay needs a bold sans-serif that resembles IG's native caption font.
- * We resolve one in priority order so it works out of the box in most
- * containers, and register it under a stable family name.
- *
- * To pin an exact font (recommended for production fidelity), drop a bold TTF
- * at apps/worker/assets/fonts/ or set FONT_PATH.
+ * Register every caption-style font (one TTF per style) under its family name,
+ * plus a bold fallback. Idempotent. Called once before the first render.
  */
-export const HOOK_FONT_FAMILY = "RotationHook";
+export function ensureFonts(): void {
+  if (ready) return;
 
-let registered = false;
-
-function candidatePaths(): string[] {
-  const bundled = join(__dirname, "..", "..", "assets", "fonts");
-  const bundledFonts = existsSync(bundled)
-    ? readdirSync(bundled)
-        .filter((f) => /\.(ttf|otf)$/i.test(f))
-        .map((f) => join(bundled, f))
-    : [];
-
-  return [
-    ...(process.env.FONT_PATH ? [process.env.FONT_PATH] : []),
-    ...bundledFonts,
-    // Common system bold sans locations across distros.
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
-    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-    "/Library/Fonts/Arial Bold.ttf",
-  ];
-}
-
-/** Returns the family name to use in canvas ctx.font. */
-export function ensureHookFont(): string {
-  if (registered) return HOOK_FONT_FAMILY;
-  for (const p of candidatePaths()) {
-    try {
-      if (p && existsSync(p)) {
-        GlobalFonts.registerFromPath(p, HOOK_FONT_FAMILY);
-        registered = true;
-        return HOOK_FONT_FAMILY;
+  // Per-style fonts.
+  for (const style of CAPTION_STYLES) {
+    const path = join(STYLES_DIR, style.fontFile);
+    if (existsSync(path)) {
+      try {
+        GlobalFonts.registerFromPath(path, style.family);
+        registered.add(style.family);
+      } catch {
+        /* skip a bad font file; render falls back below */
       }
-    } catch {
-      // try next candidate
     }
   }
-  // No bundled/system font found — fall back to whatever canvas resolves for
-  // sans-serif. Rendering still succeeds; fidelity may vary.
-  console.warn(
-    "[overlay] No bold TTF found; falling back to generic sans-serif. " +
-      "Drop a bold font at apps/worker/assets/fonts/ or set FONT_PATH for IG-accurate captions."
-  );
-  registered = true;
-  return "sans-serif";
+
+  // Fallback: prefer a bundled bold TTF, else FONT_PATH, else any base TTF.
+  const fallbackCandidates = [
+    process.env.FONT_PATH,
+    join(BASE_DIR, "LiberationSans-Bold.ttf"),
+    join(BASE_DIR, "DejaVuSans-Bold.ttf"),
+    ...(existsSync(BASE_DIR)
+      ? readdirSync(BASE_DIR)
+          .filter((f) => /\.(ttf|otf)$/i.test(f))
+          .map((f) => join(BASE_DIR, f))
+      : []),
+  ].filter(Boolean) as string[];
+
+  for (const p of fallbackCandidates) {
+    if (existsSync(p)) {
+      try {
+        GlobalFonts.registerFromPath(p, FALLBACK_FAMILY);
+        registered.add(FALLBACK_FAMILY);
+        break;
+      } catch {
+        /* try next */
+      }
+    }
+  }
+
+  ready = true;
+}
+
+/** The family to use for a style, falling back if its font didn't register. */
+export function familyFor(family: string): string {
+  return registered.has(family) ? family : FALLBACK_FAMILY;
 }
