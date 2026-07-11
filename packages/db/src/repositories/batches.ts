@@ -1,4 +1,4 @@
-import { query } from "../client.js";
+import { query, tx } from "../client.js";
 import type { Batch, BatchStatus, Clip, Render } from "@rotation/shared";
 
 /**
@@ -135,29 +135,45 @@ export async function setBatchStatus(
  * render completes so the batch flips to complete/failed without a separate
  * bookkeeping path.
  */
+/**
+ * Recompute a batch's status from its renders' statuses. Serialized per batch:
+ * two renders finishing at once would otherwise race (read-then-write), and a
+ * stale count could overwrite a 'complete' with 'processing', wedging a fully
+ * rendered batch forever. Locking the batch row FOR UPDATE makes each caller
+ * count after the previous one has committed, so the last finisher always wins.
+ */
 export async function refreshBatchStatus(batchId: string): Promise<BatchStatus> {
-  const { rows } = await query<{
-    total: string;
-    done: string;
-    failed: string;
-  }>(
-    `SELECT
-        count(*) AS total,
-        count(*) FILTER (WHERE status = 'complete') AS done,
-        count(*) FILTER (WHERE status = 'failed') AS failed
-     FROM renders WHERE batch_id = $1`,
-    [batchId]
-  );
-  const total = Number(rows[0]?.total ?? 0);
-  const done = Number(rows[0]?.done ?? 0);
-  const failed = Number(rows[0]?.failed ?? 0);
+  return tx(async (client) => {
+    // Serialize concurrent refreshes for this batch.
+    await client.query("SELECT id FROM batches WHERE id = $1 FOR UPDATE", [
+      batchId,
+    ]);
+    const { rows } = await client.query<{
+      total: string;
+      done: string;
+      failed: string;
+    }>(
+      `SELECT
+          count(*) AS total,
+          count(*) FILTER (WHERE status = 'complete') AS done,
+          count(*) FILTER (WHERE status = 'failed') AS failed
+       FROM renders WHERE batch_id = $1`,
+      [batchId]
+    );
+    const total = Number(rows[0]?.total ?? 0);
+    const done = Number(rows[0]?.done ?? 0);
+    const failed = Number(rows[0]?.failed ?? 0);
 
-  let status: BatchStatus = "processing";
-  if (total > 0 && done + failed >= total) {
-    status = failed === total ? "failed" : "complete";
-  }
-  await query("UPDATE batches SET status = $2 WHERE id = $1", [batchId, status]);
-  return status;
+    let status: BatchStatus = "processing";
+    if (total > 0 && done + failed >= total) {
+      status = failed === total ? "failed" : "complete";
+    }
+    await client.query("UPDATE batches SET status = $2 WHERE id = $1", [
+      batchId,
+      status,
+    ]);
+    return status;
+  });
 }
 
 /** Full batch detail used by the progress + delivery views. */
