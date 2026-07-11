@@ -69,5 +69,11 @@ export async function enqueueRenders(jobs: RenderJob[]): Promise<void> {
 }
 
 export async function enqueueZip(job: ZipJob): Promise<void> {
-  await queues().zip.add("zip", job, { jobId: `zip-${job.batchId}-${Date.now()}` });
+  // Stable jobId per batch dedupes concurrent "Download all" clicks to a single
+  // build; removeOnComplete/Fail clears it so a later click can rebuild fresh.
+  await queues().zip.add("zip", job, {
+    jobId: `zip-${job.batchId}`,
+    removeOnComplete: true,
+    removeOnFail: true,
+  });
 }

@@ -4,6 +4,7 @@ import { enqueueZip } from "@rotation/queue";
 import {
   presignGet,
   objectExists,
+  deleteObject,
   R2_PREFIX,
   batchDisplayName,
   slugify,
@@ -29,6 +30,9 @@ export const POST = apiHandler(
     const complete = await rendersRepo.listCompleteRenders(batchId);
     if (complete.length === 0) badRequest("No completed renders to zip yet");
 
+    // Drop any previous zip first so the GET poll can't hand back a stale
+    // archive (built before the latest renders/retries) while this one rebuilds.
+    await deleteObject(R2_PREFIX.zip(ctx.label.id, batchId)).catch(() => {});
     await enqueueZip({ batchId, labelId: ctx.label.id });
     return NextResponse.json({ ok: true, queued: complete.length });
   }

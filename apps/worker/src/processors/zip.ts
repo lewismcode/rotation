@@ -41,12 +41,24 @@ export async function processZip(job: ZipJob): Promise<string> {
     ]);
     if (!clip || !hook) continue;
 
+    // Skip an object that's gone (e.g. purged mid-build) rather than letting
+    // one 404 abort the entire archive.
+    let stream;
+    try {
+      stream = await getObjectStream(render.r2_key_output);
+    } catch (err) {
+      console.warn(
+        `[zip] skipping missing ${render.r2_key_output}:`,
+        (err as Error).message
+      );
+      continue;
+    }
+
     let name = outputFilename(clip.original_filename, hook.text);
     // Guard against duplicate names within the zip.
     if (seen.has(name)) name = `${render.id.slice(0, 8)}__${name}`;
     seen.add(name);
 
-    const stream = await getObjectStream(render.r2_key_output);
     archive.append(stream, { name });
   }
 
