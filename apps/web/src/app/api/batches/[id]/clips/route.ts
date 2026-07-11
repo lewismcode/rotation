@@ -9,6 +9,7 @@ import {
   ALLOWED_VIDEO_MIME,
 } from "@rotation/shared";
 import { requireContext } from "@/lib/context";
+import { creatorScope } from "@/lib/scope";
 import { apiHandler, notFound, badRequest } from "@/lib/api";
 
 export const runtime = "nodejs";
@@ -29,7 +30,11 @@ export const POST = apiHandler(
     const ctx = await requireContext();
     const { id: batchId } = await params;
 
-    const batch = await batchesRepo.getBatch(ctx.label.id, batchId);
+    const batch = await batchesRepo.getBatch(
+      ctx.label.id,
+      batchId,
+      creatorScope(ctx)
+    );
     if (!batch) notFound("Batch not found");
 
     const { filename, contentType, size } = bodySchema.parse(await req.json());

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Batch, Clip, Render, Hook } from "@rotation/shared/types";
 import type { CaptionStyle } from "@rotation/shared/caption-styles";
 import { StepShell, type StepState } from "./StepShell";
+import { BatchNameEditor } from "./BatchNameEditor";
 import { UploadStep } from "./UploadStep";
 import { HooksStep } from "./HooksStep";
 import { RenderGrid } from "./RenderGrid";
@@ -96,10 +97,14 @@ export function BatchFlow({
   return (
     <div className="mx-auto max-w-2xl space-y-3">
       <div className="rise mb-6">
-        <h1 className="font-display text-2xl font-semibold tracking-tight">
-          Batch
-        </h1>
-        <p className="data mt-1 text-xs text-faint">{detail.batch.id}</p>
+        <BatchNameEditor
+          batchId={detail.batch.id}
+          name={detail.batch.name}
+          labelSeq={detail.batch.label_seq}
+        />
+        <p className="data mt-1 text-xs text-faint">
+          {new Date(detail.batch.created_at).toLocaleString()}
+        </p>
       </div>
 
       {/* Step 1 — Upload */}

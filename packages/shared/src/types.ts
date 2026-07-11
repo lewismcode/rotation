@@ -45,7 +45,19 @@ export interface Batch {
   label_id: string;
   created_by_user_id: string;
   status: BatchStatus;
+  name: string | null;
+  label_seq: number | null;
   created_at: string;
+}
+
+/** Friendly display name: custom name if set, else "Batch {seq}". */
+export function batchDisplayName(
+  batch: Pick<Batch, "name" | "label_seq" | "id">
+): string {
+  const custom = batch.name?.trim();
+  if (custom) return custom;
+  if (batch.label_seq != null) return `Batch ${batch.label_seq}`;
+  return `Batch ${batch.id.slice(0, 6)}`;
 }
 
 export interface Clip {

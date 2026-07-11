@@ -9,6 +9,8 @@ export interface DashboardStats {
   activeHooks: number;
   recentBatches: Array<{
     id: string;
+    name: string | null;
+    label_seq: number | null;
     status: BatchStatus;
     created_at: string;
     clip_count: number;
@@ -18,8 +20,16 @@ export interface DashboardStats {
   topHooks: Array<{ id: string; text: string; uses: number }>;
 }
 
-/** Everything the overview dashboard shows, label-scoped, in a few queries. */
-export async function getDashboard(labelId: string): Promise<DashboardStats> {
+/**
+ * Everything the overview dashboard shows. Pass createdByUserId to scope to a
+ * single artist (their own numbers); omit for the whole label (admin view).
+ * Active hooks are always label-wide (the hook library is shared).
+ */
+export async function getDashboard(
+  labelId: string,
+  createdByUserId?: string
+): Promise<DashboardStats> {
+  const uid = createdByUserId ?? null;
   const totals = await query<{
     reels: string;
     in_progress: string;
@@ -29,34 +39,39 @@ export async function getDashboard(labelId: string): Promise<DashboardStats> {
   }>(
     `SELECT
        (SELECT count(*) FROM renders r JOIN batches b ON b.id = r.batch_id
-          WHERE b.label_id = $1 AND r.status = 'complete') AS reels,
+          WHERE b.label_id = $1 AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
+            AND r.status = 'complete') AS reels,
        (SELECT count(*) FROM renders r JOIN batches b ON b.id = r.batch_id
-          WHERE b.label_id = $1 AND r.status IN ('queued','processing')) AS in_progress,
-       (SELECT count(*) FROM batches WHERE label_id = $1) AS batches,
+          WHERE b.label_id = $1 AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
+            AND r.status IN ('queued','processing')) AS in_progress,
+       (SELECT count(*) FROM batches
+          WHERE label_id = $1 AND ($2::uuid IS NULL OR created_by_user_id = $2)) AS batches,
        (SELECT count(*) FROM clips c JOIN batches b ON b.id = c.batch_id
-          WHERE b.label_id = $1) AS clips,
+          WHERE b.label_id = $1 AND ($2::uuid IS NULL OR b.created_by_user_id = $2)) AS clips,
        (SELECT count(*) FROM hooks WHERE label_id = $1 AND is_active) AS active_hooks`,
-    [labelId]
+    [labelId, uid]
   );
 
   const recent = await query<{
     id: string;
+    name: string | null;
+    label_seq: number | null;
     status: BatchStatus;
     created_at: string;
     clip_count: string;
     render_total: string;
     render_complete: string;
   }>(
-    `SELECT b.id, b.status, b.created_at,
+    `SELECT b.id, b.name, b.label_seq, b.status, b.created_at,
        (SELECT count(*) FROM clips c WHERE c.batch_id = b.id) AS clip_count,
        (SELECT count(*) FROM renders r WHERE r.batch_id = b.id) AS render_total,
        (SELECT count(*) FROM renders r WHERE r.batch_id = b.id AND r.status = 'complete')
          AS render_complete
      FROM batches b
-     WHERE b.label_id = $1
+     WHERE b.label_id = $1 AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
      ORDER BY b.created_at DESC
      LIMIT 5`,
-    [labelId]
+    [labelId, uid]
   );
 
   const topHooks = await query<{ id: string; text: string; uses: string }>(
@@ -65,10 +80,11 @@ export async function getDashboard(labelId: string): Promise<DashboardStats> {
      JOIN renders r ON r.hook_id = h.id
      JOIN batches b ON b.id = r.batch_id
      WHERE h.label_id = $1 AND b.label_id = $1
+       AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
      GROUP BY h.id, h.text
      ORDER BY uses DESC
      LIMIT 5`,
-    [labelId]
+    [labelId, uid]
   );
 
   const t = totals.rows[0]!;
@@ -80,6 +96,8 @@ export async function getDashboard(labelId: string): Promise<DashboardStats> {
     activeHooks: Number(t.active_hooks),
     recentBatches: recent.rows.map((r) => ({
       id: r.id,
+      name: r.name,
+      label_seq: r.label_seq,
       status: r.status,
       created_at: r.created_at,
       clip_count: Number(r.clip_count),
@@ -138,7 +156,8 @@ export async function getRoster(labelId: string): Promise<RosterRow[]> {
 /** Completed reels per day over the last `days`, zero-filled for a clean chart. */
 export async function getActivity(
   labelId: string,
-  days = 14
+  days = 14,
+  createdByUserId?: string
 ): Promise<Array<{ day: string; count: number }>> {
   const { rows } = await query<{ day: string; count: string }>(
     `SELECT to_char(d, 'YYYY-MM-DD') AS day, COALESCE(x.cnt, 0) AS count
@@ -151,25 +170,27 @@ export async function getActivity(
          SELECT date_trunc('day', r.completed_at) AS day, count(*) AS cnt
          FROM renders r JOIN batches b ON b.id = r.batch_id
          WHERE b.label_id = $1 AND r.status = 'complete'
+           AND ($3::uuid IS NULL OR b.created_by_user_id = $3)
          GROUP BY 1
        ) x ON x.day = d
      ORDER BY d`,
-    [labelId, days]
+    [labelId, days, createdByUserId ?? null]
   );
   return rows.map((r) => ({ day: r.day, count: Number(r.count) }));
 }
 
 /** Render count per caption style (usage breakdown). */
 export async function getStyleBreakdown(
-  labelId: string
+  labelId: string,
+  createdByUserId?: string
 ): Promise<Array<{ style: string; count: number }>> {
   const { rows } = await query<{ style: string; count: string }>(
     `SELECT r.caption_style AS style, count(*) AS count
      FROM renders r JOIN batches b ON b.id = r.batch_id
-     WHERE b.label_id = $1
+     WHERE b.label_id = $1 AND ($2::uuid IS NULL OR b.created_by_user_id = $2)
      GROUP BY r.caption_style
      ORDER BY count DESC`,
-    [labelId]
+    [labelId, createdByUserId ?? null]
   );
   return rows.map((r) => ({ style: r.style, count: Number(r.count) }));
 }

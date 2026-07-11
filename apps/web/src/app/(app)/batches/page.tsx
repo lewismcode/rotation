@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { batchesRepo } from "@rotation/db";
+import { batchDisplayName } from "@rotation/shared";
 import { requireContextOrRedirect } from "@/lib/context";
+import { creatorScope } from "@/lib/scope";
 import { NewBatchButton } from "@/components/NewBatchButton";
 import { StatusPill } from "@/components/StatusPill";
 
@@ -8,7 +10,8 @@ export const dynamic = "force-dynamic";
 
 export default async function BatchesPage() {
   const ctx = await requireContextOrRedirect();
-  const batches = await batchesRepo.listBatches(ctx.label.id);
+  const isAdmin = ctx.user.role === "admin";
+  const batches = await batchesRepo.listBatches(ctx.label.id, creatorScope(ctx));
 
   return (
     <div className="space-y-6">
@@ -18,7 +21,9 @@ export default async function BatchesPage() {
             Batches
           </h1>
           <p className="mt-1 text-sm text-secondary">
-            Drop clips, pick hooks, download finished Reels.
+            {isAdmin
+              ? "Every batch across your label."
+              : "Your batches — drop clips, pick hooks, download finished Reels."}
           </p>
         </div>
         <NewBatchButton />
@@ -40,8 +45,8 @@ export default async function BatchesPage() {
                 className="glass glass-hover flex items-center justify-between rounded-2xl px-5 py-4"
               >
                 <div className="flex flex-col">
-                  <span className="data text-sm text-primary">
-                    batch {b.id.slice(0, 8)}
+                  <span className="text-sm font-medium text-primary">
+                    {batchDisplayName(b)}
                   </span>
                   <span className="data text-xs text-faint">
                     {new Date(b.created_at).toLocaleString()}

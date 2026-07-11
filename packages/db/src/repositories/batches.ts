@@ -1,32 +1,71 @@
 import { query } from "../client.js";
 import type { Batch, BatchStatus, Clip, Render } from "@rotation/shared";
 
+/**
+ * Optional creator scope. Admins pass nothing (whole label); artists pass their
+ * own user id so they only ever see/act on their own batches.
+ */
+export interface CreatorScope {
+  createdByUserId?: string;
+}
+
 export async function createBatch(input: {
   labelId: string;
   createdByUserId: string;
 }): Promise<Batch> {
   const { rows } = await query<Batch>(
-    `INSERT INTO batches (label_id, created_by_user_id, status)
-     VALUES ($1, $2, 'uploading') RETURNING *`,
+    `INSERT INTO batches (label_id, created_by_user_id, status, label_seq)
+     VALUES ($1, $2, 'uploading',
+             (SELECT COALESCE(MAX(label_seq), 0) + 1 FROM batches WHERE label_id = $1))
+     RETURNING *`,
     [input.labelId, input.createdByUserId]
   );
   return rows[0]!;
 }
 
-export async function getBatch(labelId: string, id: string): Promise<Batch | null> {
+export async function getBatch(
+  labelId: string,
+  id: string,
+  scope: CreatorScope = {}
+): Promise<Batch | null> {
   const { rows } = await query<Batch>(
-    "SELECT * FROM batches WHERE id = $1 AND label_id = $2",
-    [id, labelId]
+    `SELECT * FROM batches
+     WHERE id = $1 AND label_id = $2
+       AND ($3::uuid IS NULL OR created_by_user_id = $3)`,
+    [id, labelId, scope.createdByUserId ?? null]
   );
   return rows[0] ?? null;
 }
 
-export async function listBatches(labelId: string): Promise<Batch[]> {
+export async function listBatches(
+  labelId: string,
+  scope: CreatorScope = {}
+): Promise<Batch[]> {
   const { rows } = await query<Batch>(
-    "SELECT * FROM batches WHERE label_id = $1 ORDER BY created_at DESC LIMIT 50",
-    [labelId]
+    `SELECT * FROM batches
+     WHERE label_id = $1
+       AND ($2::uuid IS NULL OR created_by_user_id = $2)
+     ORDER BY created_at DESC LIMIT 50`,
+    [labelId, scope.createdByUserId ?? null]
   );
   return rows;
+}
+
+export async function renameBatch(
+  labelId: string,
+  id: string,
+  name: string | null,
+  scope: CreatorScope = {}
+): Promise<Batch | null> {
+  const clean = name?.trim() ? name.trim().slice(0, 80) : null;
+  const { rows } = await query<Batch>(
+    `UPDATE batches SET name = $3
+     WHERE id = $1 AND label_id = $2
+       AND ($4::uuid IS NULL OR created_by_user_id = $4)
+     RETURNING *`,
+    [id, labelId, clean, scope.createdByUserId ?? null]
+  );
+  return rows[0] ?? null;
 }
 
 export async function setBatchStatus(
@@ -74,9 +113,10 @@ export async function refreshBatchStatus(batchId: string): Promise<BatchStatus> 
 /** Full batch detail used by the progress + delivery views. */
 export async function getBatchDetail(
   labelId: string,
-  batchId: string
+  batchId: string,
+  scope: CreatorScope = {}
 ): Promise<{ batch: Batch; clips: Clip[]; renders: Render[] } | null> {
-  const batch = await getBatch(labelId, batchId);
+  const batch = await getBatch(labelId, batchId, scope);
   if (!batch) return null;
   const clips = (
     await query<Clip>(

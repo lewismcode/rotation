@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { statsRepo } from "@rotation/db";
+import { batchDisplayName } from "@rotation/shared";
 import { requireContextOrRedirect } from "@/lib/context";
+import { scopedUserId } from "@/lib/scope";
 import { NewBatchButton } from "@/components/NewBatchButton";
 import { StatusPill } from "@/components/StatusPill";
 import { ActivityChart } from "@/components/dashboard/ActivityChart";
@@ -10,10 +12,11 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const ctx = await requireContextOrRedirect();
+  const uid = scopedUserId(ctx); // undefined for admin (whole label), else self
   const [stats, activity, styles] = await Promise.all([
-    statsRepo.getDashboard(ctx.label.id),
-    statsRepo.getActivity(ctx.label.id, 14),
-    statsRepo.getStyleBreakdown(ctx.label.id),
+    statsRepo.getDashboard(ctx.label.id, uid),
+    statsRepo.getActivity(ctx.label.id, 14, uid),
+    statsRepo.getStyleBreakdown(ctx.label.id, uid),
   ]);
   const firstName = ctx.label.display_name;
 
@@ -76,14 +79,15 @@ export default async function DashboardPage() {
                     className="glass-hover flex items-center justify-between rounded-xl border border-[var(--glass-border)] px-4 py-3"
                   >
                     <div className="flex flex-col">
-                      <span className="data text-sm text-primary">
+                      <span className="text-sm font-medium text-primary">
+                        {batchDisplayName(b)}
+                      </span>
+                      <span className="data text-xs text-faint">
                         {b.clip_count} clip{b.clip_count === 1 ? "" : "s"}
                         {b.render_total > 0
                           ? ` · ${b.render_complete}/${b.render_total} reels`
-                          : ""}
-                      </span>
-                      <span className="data text-xs text-faint">
-                        {new Date(b.created_at).toLocaleString()}
+                          : ""}{" "}
+                        · {new Date(b.created_at).toLocaleDateString()}
                       </span>
                     </div>
                     <StatusPill status={b.status} />

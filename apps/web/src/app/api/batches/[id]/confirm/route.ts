@@ -4,6 +4,7 @@ import { batchesRepo, clipsRepo, hooksRepo, rendersRepo } from "@rotation/db";
 import { enqueueRenders } from "@rotation/queue";
 import { LIMITS, CAPTION_STYLE_IDS, DEFAULT_CAPTION_STYLE } from "@rotation/shared";
 import { requireContext } from "@/lib/context";
+import { creatorScope } from "@/lib/scope";
 import { apiHandler, notFound, badRequest } from "@/lib/api";
 
 export const runtime = "nodejs";
@@ -24,7 +25,11 @@ export const POST = apiHandler(
     const ctx = await requireContext();
     const { id: batchId } = await params;
 
-    const batch = await batchesRepo.getBatch(ctx.label.id, batchId);
+    const batch = await batchesRepo.getBatch(
+      ctx.label.id,
+      batchId,
+      creatorScope(ctx)
+    );
     if (!batch) notFound("Batch not found");
 
     const { hookIds, captionStyle } = bodySchema.parse(await req.json());
