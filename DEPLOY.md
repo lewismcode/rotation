@@ -31,11 +31,10 @@ Once Clerk and R2 are set up, this is deploy-and-test — no code changes needed
 ## 2. Service: `web`
 
 - **Root directory:** repo root (default).
-- **Build command:** `npm run build --workspace @rotation/web`
-- **Start command:**
-  `npm run db:migrate && npm run start --workspace @rotation/web`
-  (Migrations are idempotent, so running them on boot is safe. Move this to a
-  one-off if you prefer a manual migration step.)
+- **Build command:** `npm run build:web`
+- **Pre-Deploy command:** `npm run db:migrate` (creates/updates the schema once
+  per deploy, before the new version goes live).
+- **Start command:** `npm run start:web`
 - **Networking:** generate a public domain. Set it as the Clerk allowed origin
   and the R2 CORS origin.
 
@@ -43,9 +42,14 @@ Once Clerk and R2 are set up, this is deploy-and-test — no code changes needed
 
 - Add a **second service** from the **same repo** (New Service → GitHub → same
   repo). Root directory: repo root.
-- **Build command:** *(none — the worker runs TypeScript via `tsx`)*
-- **Start command:** `npm run start --workspace @rotation/worker`
+- **Build command:** *(leave default — the root `build` script is a no-op, so
+  the worker never rebuilds the web app; it just runs TypeScript via `tsx`)*.
+- **Start command:** `npm run start:worker`
 - ffmpeg is provided by the root `nixpacks.toml`.
+
+> The root `npm run build` is intentionally a no-op. Only the web service builds,
+> via `npm run build:web`. This keeps the worker's build fast and prevents a web
+> build issue from ever failing the worker.
 
 ## 4. Environment variables
 

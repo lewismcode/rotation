@@ -11,7 +11,12 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "//build": "Root build is a NO-OP on purpose. Each service builds itself so the worker (which needs no build) never rebuilds the web app. Web build command: `npm run build:web`. Build everything locally with `npm run build:all`.",
+    "build": "echo 'No root build — services build individually. Web: npm run build:web (see DEPLOY.md).'",
+    "build:web": "npm run build --workspace @rotation/web",
+    "build:all": "npm run build --workspaces --if-present",
+    "start:web": "npm run start --workspace @rotation/web",
+    "start:worker": "npm run start --workspace @rotation/worker",
     "dev:web": "npm run dev --workspace apps/web",
     "dev:worker": "npm run dev --workspace apps/worker",
     "db:migrate": "npm run migrate --workspace @rotation/db",
