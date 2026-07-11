@@ -61,19 +61,7 @@ export function DeliveryStep({
                 className="relative aspect-[9/16] w-full overflow-hidden"
                 style={{ background: "#0d0c0a" }}
               >
-                {r.thumbnail_r2_key ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={`/api/renders/${r.id}/thumbnail`}
-                    alt=""
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="grid h-full w-full place-items-center text-xs text-faint">
-                    preview soon
-                  </div>
-                )}
+                <Thumb renderId={r.id} hasKey={!!r.thumbnail_r2_key} />
                 {hook ? (
                   <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5 text-[11px] text-white/90">
                     {hook.text}
@@ -91,6 +79,28 @@ export function DeliveryStep({
         })}
       </ul>
     </div>
+  );
+}
+
+/** Render thumbnail with a graceful fallback if the key is missing or 404s. */
+function Thumb({ renderId, hasKey }: { renderId: string; hasKey: boolean }) {
+  const [failed, setFailed] = useState(false);
+  if (!hasKey || failed) {
+    return (
+      <div className="grid h-full w-full place-items-center text-xs text-faint">
+        preview soon
+      </div>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/api/renders/${renderId}/thumbnail`}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="h-full w-full object-cover"
+    />
   );
 }
 
