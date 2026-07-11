@@ -37,6 +37,13 @@ export const POST = apiHandler(
     );
     if (!batch) notFound("Batch not found");
 
+    // Only a not-yet-generated batch can be confirmed. Without this, re-posting
+    // confirm (e.g. with a different hook set) re-fans-out on top of existing
+    // renders and slips past MAX_RENDERS_PER_BATCH.
+    if (batch.status !== "uploading" && batch.status !== "ready") {
+      badRequest("This batch has already been generated.");
+    }
+
     const { hookIds, captionStyle } = bodySchema.parse(await req.json());
 
     const clips = (await clipsRepo.listClips(batchId)).filter(
@@ -65,7 +72,9 @@ export const POST = apiHandler(
     const hooks = await hooksRepo.getHooksByIds(ctx.label.id, hookIds);
     if (hooks.length === 0) badRequest("None of the selected hooks were found");
 
-    const totalRenders = clips.length * hooks.length;
+    // Count existing renders too, so the cap is cumulative across confirms.
+    const existing = await rendersRepo.countRenders(batchId);
+    const totalRenders = existing + clips.length * hooks.length;
     if (totalRenders > LIMITS.MAX_RENDERS_PER_BATCH) {
       badRequest(
         `That would create ${totalRenders} renders; the limit is ${LIMITS.MAX_RENDERS_PER_BATCH}. ` +

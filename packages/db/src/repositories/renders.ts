@@ -114,6 +114,15 @@ export async function setRenderStatus(
   await query("UPDATE renders SET status = $2 WHERE id = $1", [renderId, status]);
 }
 
+/** Total render rows already created for a batch (for the cumulative cap). */
+export async function countRenders(batchId: string): Promise<number> {
+  const { rows } = await query<{ n: string }>(
+    "SELECT count(*) AS n FROM renders WHERE batch_id = $1",
+    [batchId]
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 /** Completed renders for a batch — used to build the zip. */
 export async function listCompleteRenders(batchId: string): Promise<Render[]> {
   const { rows } = await query<Render>(
