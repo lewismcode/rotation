@@ -49,8 +49,8 @@ export function HooksAdmin({ initialHooks }: { initialHooks: Hook[] }) {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-end justify-between">
+    <div className="space-y-6">
+      <div className="rise flex items-end justify-between">
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight">
             Hook library
@@ -61,66 +61,65 @@ export function HooksAdmin({ initialHooks }: { initialHooks: Hook[] }) {
         </div>
         <button
           onClick={() => setEditing("new")}
-          className="rounded-md bg-accent px-4 py-2 font-medium text-[#141310] hover:opacity-90"
+          className="rounded-full bg-accent px-4 py-2 font-medium text-[#141310] shadow-lg shadow-[var(--accent-soft)] transition-opacity hover:opacity-90"
         >
           Add hook
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-panel">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-xs text-faint">
-              <th className="px-4 py-3 font-medium">Hook</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {hooks.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="px-4 py-8 text-center text-secondary">
-                  No hooks yet.
-                </td>
-              </tr>
-            ) : (
-              hooks.map((hook) => (
-                <tr key={hook.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-3 text-primary">{hook.text}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="data text-xs"
-                      style={{
-                        color: hook.is_active
-                          ? "var(--complete)"
-                          : "var(--text-faint)",
-                      }}
-                    >
-                      {hook.is_active ? "active" : "inactive"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => setEditing(hook)}
-                        className="rounded-md border border-border px-2.5 py-1 text-xs text-primary hover:border-accent"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => toggleActive(hook)}
-                        className="rounded-md border border-border px-2.5 py-1 text-xs text-secondary hover:border-accent hover:text-primary"
-                      >
-                        {hook.is_active ? "Deactivate" : "Activate"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      {hooks.length === 0 ? (
+        <div className="glass rise grid place-items-center rounded-2xl px-6 py-16 text-center">
+          <p className="text-secondary">No hooks yet.</p>
+          <p className="mt-1 text-sm text-faint">
+            Add a hook to overlay it onto clips.
+          </p>
+        </div>
+      ) : (
+        <ul className="rise grid gap-2.5 sm:grid-cols-2">
+          {hooks.map((hook) => (
+            <li
+              key={hook.id}
+              className="glass flex flex-col justify-between gap-3 rounded-2xl p-4"
+            >
+              <p className="text-sm text-primary">{hook.text}</p>
+              <div className="flex items-center justify-between">
+                <span
+                  className="data inline-flex items-center gap-1.5 text-xs"
+                  style={{
+                    color: hook.is_active
+                      ? "var(--complete)"
+                      : "var(--text-faint)",
+                  }}
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{
+                      background: hook.is_active
+                        ? "var(--complete)"
+                        : "var(--text-faint)",
+                    }}
+                  />
+                  {hook.is_active ? "active" : "inactive"}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditing(hook)}
+                    className="rounded-full border border-[var(--glass-border)] px-3 py-1 text-xs text-primary transition-colors hover:border-accent"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => toggleActive(hook)}
+                    className="rounded-full border border-[var(--glass-border)] px-3 py-1 text-xs text-secondary transition-colors hover:border-accent hover:text-primary"
+                  >
+                    {hook.is_active ? "Deactivate" : "Activate"}
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
       {editing !== null ? (
         <HookModal
@@ -154,11 +153,11 @@ function HookModal({
 
   return (
     <div
-      className="fixed inset-0 z-30 grid place-items-center bg-black/50 p-4"
+      className="fixed inset-0 z-40 grid place-items-center bg-black/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-lg border border-border bg-panel p-5"
+        className="glass-strong w-full max-w-md rounded-2xl p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="font-display text-lg font-medium">
@@ -171,7 +170,7 @@ function HookModal({
           maxLength={300}
           autoFocus
           placeholder="e.g. wait for the drop 🔊"
-          className="mt-4 w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-sm text-primary outline-none focus:border-accent"
+          className="mt-4 w-full resize-none rounded-xl border border-[var(--glass-border)] bg-[var(--bg)]/40 px-3 py-2 text-sm text-primary outline-none focus:border-accent"
         />
         <div className="mt-4 flex justify-end gap-2">
           <button

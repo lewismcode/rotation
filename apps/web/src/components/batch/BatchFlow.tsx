@@ -94,8 +94,8 @@ export function BatchFlow({
   ).length;
 
   return (
-    <div className="space-y-3">
-      <div className="mb-6">
+    <div className="mx-auto max-w-2xl space-y-3">
+      <div className="rise mb-6">
         <h1 className="font-display text-2xl font-semibold tracking-tight">
           Batch
         </h1>

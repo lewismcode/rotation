@@ -20,42 +20,133 @@
 
 /*
  * Design tokens. Dark is the default; light overrides via [data-theme="light"].
- * Values come straight from the build spec. Later, per-label theming can
- * override these same variables from the label record.
+ * Warm charcoal + amber identity, now expressed as frosted glass over an ambient
+ * gradient. `--glass-*` drive the translucent panels; `--ambient-*` the backdrop.
  */
 :root,
 [data-theme="dark"] {
-  --bg: #141310;
+  --bg: #100f0c;
   --panel: #1c1a15;
   --border: #2c2820;
   --text-primary: #ede9e1;
-  --text-secondary: #8f897a;
-  --text-faint: #59544a;
-  --accent: #c9982e;
-  --complete: #4f9e93;
+  --text-secondary: #9a927f;
+  --text-faint: #625b4d;
+  --accent: #d4a13a;
+  --accent-soft: rgba(212, 161, 58, 0.16);
+  --complete: #52a89b;
+
+  --glass-bg: rgba(30, 27, 21, 0.52);
+  --glass-bg-strong: rgba(30, 27, 21, 0.74);
+  --glass-border: rgba(237, 233, 225, 0.10);
+  --glass-highlight: rgba(255, 255, 255, 0.07);
+  --glass-shadow: 0 10px 40px -8px rgba(0, 0, 0, 0.55);
+
+  --ambient-1: rgba(212, 161, 58, 0.20);   /* amber */
+  --ambient-2: rgba(82, 168, 155, 0.16);   /* teal */
+  --ambient-3: rgba(88, 96, 150, 0.16);    /* cool indigo */
+  --ambient-base-a: #16130d;
+  --ambient-base-b: #0d0c0a;
 }
 
 [data-theme="light"] {
-  --bg: #f6f3ec;
+  --bg: #f4f0e7;
   --panel: #fdfcf8;
   --border: #e3ddcc;
   --text-primary: #211f19;
-  --text-secondary: #726b5a;
+  --text-secondary: #6b6454;
   --text-faint: #a89f8a;
   --accent: #9c7420;
+  --accent-soft: rgba(156, 116, 32, 0.14);
   --complete: #367b70;
+
+  --glass-bg: rgba(255, 253, 248, 0.58);
+  --glass-bg-strong: rgba(255, 253, 248, 0.82);
+  --glass-border: rgba(33, 31, 25, 0.08);
+  --glass-highlight: rgba(255, 255, 255, 0.75);
+  --glass-shadow: 0 10px 40px -12px rgba(120, 104, 74, 0.30);
+
+  --ambient-1: rgba(212, 161, 58, 0.28);
+  --ambient-2: rgba(82, 168, 155, 0.20);
+  --ambient-3: rgba(120, 132, 196, 0.18);
+  --ambient-base-a: #f6f2e9;
+  --ambient-base-b: #ece6d8;
 }
 
 html {
-  background: var(--bg);
+  background: var(--ambient-base-b);
   color: var(--text-primary);
 }
 
 body {
-  background: var(--bg);
   color: var(--text-primary);
   font-family: var(--font-body), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Ambient gradient backdrop — fixed, sits behind the glass. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(60% 55% at 12% 8%, var(--ambient-1) 0%, transparent 60%),
+    radial-gradient(55% 50% at 92% 22%, var(--ambient-3) 0%, transparent 62%),
+    radial-gradient(65% 60% at 78% 96%, var(--ambient-2) 0%, transparent 60%),
+    linear-gradient(160deg, var(--ambient-base-a) 0%, var(--ambient-base-b) 100%);
+  background-attachment: fixed;
+}
+
+/* A slow drift on the color blobs for life; disabled for reduced motion. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(28% 28% at 30% 40%, var(--ambient-1) 0%, transparent 70%),
+    radial-gradient(26% 26% at 70% 60%, var(--ambient-2) 0%, transparent 70%);
+  filter: blur(40px);
+  opacity: 0.5;
+  animation: drift 26s ease-in-out infinite alternate;
+}
+
+@keyframes drift {
+  from { transform: translate3d(-3%, -2%, 0) scale(1); }
+  to   { transform: translate3d(4%, 3%, 0) scale(1.08); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::after { animation: none; }
+}
+
+/* ── Glass primitives ─────────────────────────────────────────────────────── */
+.glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  backdrop-filter: blur(18px) saturate(1.5);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 0 var(--glass-highlight);
+  border-radius: 18px;
+}
+.glass-strong {
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: blur(22px) saturate(1.6);
+  backdrop-filter: blur(22px) saturate(1.6);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 0 var(--glass-highlight);
+}
+/* Interactive glass (cards/buttons that lift on hover). */
+.glass-hover {
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+.glass-hover:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border));
+  box-shadow: var(--glass-shadow), inset 0 1px 0 0 var(--glass-highlight),
+    0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 /* Data-like text (filenames, counts, statuses, step numbers) uses mono. */
@@ -66,15 +157,17 @@ body {
 
 /* Subtle grid-cell pop animation when a render lands. */
 @keyframes cell-in {
-  from {
-    transform: scale(0.9);
-    opacity: 0.4;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
+  from { transform: scale(0.9); opacity: 0.4; }
+  to { transform: scale(1); opacity: 1; }
 }
-.cell-complete {
-  animation: cell-in 220ms ease-out;
+.cell-complete { animation: cell-in 220ms ease-out; }
+
+/* Gentle entrance for cards/sections. */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: rise 360ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .rise { animation: none; }
 }

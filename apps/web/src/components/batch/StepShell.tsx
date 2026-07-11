@@ -29,24 +29,23 @@ export function StepShell({
   const locked = state === "locked";
   const clickable = !locked && !!onToggle;
 
-  const borderColor =
-    state === "active"
-      ? "var(--accent)"
-      : "var(--border)";
-
   return (
     <div
-      className="rounded-lg border bg-panel transition-colors"
+      className="glass overflow-hidden rounded-2xl transition-all"
       style={{
-        borderColor,
-        opacity: locked ? 0.5 : 1,
+        opacity: locked ? 0.55 : 1,
+        boxShadow:
+          state === "active"
+            ? "var(--glass-shadow), inset 0 1px 0 0 var(--glass-highlight), 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent)"
+            : undefined,
+        borderColor: state === "active" ? "transparent" : undefined,
       }}
     >
       <button
         type="button"
         onClick={clickable ? onToggle : undefined}
         disabled={!clickable}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
         style={{ cursor: clickable ? "pointer" : "default" }}
       >
         <StepMarker index={index} state={state} />
@@ -63,7 +62,9 @@ export function StepShell({
         </div>
       </button>
       {expanded && !locked ? (
-        <div className="border-t border-border px-4 py-4">{children}</div>
+        <div className="border-t border-[var(--glass-border)] px-4 py-4">
+          {children}
+        </div>
       ) : null}
     </div>
   );

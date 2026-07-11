@@ -4,7 +4,7 @@ import { SignUp } from "@clerk/nextjs";
 // self-serve onboarding is built yet (see spec: out of scope).
 export default function SignUpPage() {
   return (
-    <div className="grid min-h-screen place-items-center bg-bg p-6">
+    <div className="grid min-h-screen place-items-center p-6">
       <SignUp />
     </div>
   );

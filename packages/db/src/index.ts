@@ -5,3 +5,4 @@ export * as hooksRepo from "./repositories/hooks.js";
 export * as batchesRepo from "./repositories/batches.js";
 export * as clipsRepo from "./repositories/clips.js";
 export * as rendersRepo from "./repositories/renders.js";
+export * as statsRepo from "./repositories/stats.js";

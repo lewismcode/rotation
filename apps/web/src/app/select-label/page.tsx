@@ -18,7 +18,7 @@ export default async function SelectLabelPage() {
   if (await getContext()) redirect("/batches");
 
   return (
-    <div className="grid min-h-screen place-items-center bg-bg p-6">
+    <div className="grid min-h-screen place-items-center p-6">
       <div className="flex w-full max-w-md flex-col items-center gap-8">
         <div className="text-center">
           <div className="mb-3 flex items-center justify-center gap-2.5">

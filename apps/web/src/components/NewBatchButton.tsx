@@ -25,8 +25,9 @@ export function NewBatchButton() {
     <button
       onClick={start}
       disabled={loading}
-      className="rounded-md bg-accent px-4 py-2 font-medium text-[#141310] transition-opacity hover:opacity-90 disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 font-medium text-[#141310] shadow-lg shadow-[var(--accent-soft)] transition-all hover:-translate-y-0.5 hover:opacity-95 disabled:opacity-60"
     >
+      <span className="text-base leading-none">+</span>
       {loading ? "Starting…" : "New batch"}
     </button>
   );
