@@ -60,7 +60,18 @@ export function UploadStep({
       });
       if (!put.ok) throw new Error("Upload to storage failed");
 
-      await fetch(`/api/clips/${clip.id}/uploaded`, { method: "POST" });
+      // Kick off the async probe. If this fails (e.g. the job queue / Redis is
+      // unavailable), surface it — otherwise the clip would silently hang on
+      // "uploading" with no way to tell why.
+      const started = await fetch(`/api/clips/${clip.id}/uploaded`, {
+        method: "POST",
+      });
+      if (!started.ok) {
+        const { error } = await started.json().catch(() => ({}));
+        throw new Error(
+          error || "Uploaded to storage, but couldn't start processing"
+        );
+      }
       // Row now exists server-side; drop the local placeholder and refresh.
       setLocal((l) => l.filter((u) => u.name !== file.name));
       await onChanged();
