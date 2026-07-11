@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/dashboard", label: "Overview" },
   { href: "/batches", label: "Batches" },
   { href: "/roster", label: "Roster", adminOnly: true },
+  { href: "/team", label: "Team", adminOnly: true },
   { href: "/hooks", label: "Hooks", adminOnly: true },
 ];
 
