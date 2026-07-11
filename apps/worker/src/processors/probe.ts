@@ -5,7 +5,7 @@ import {
   needsResize,
   type ProbeJob,
 } from "@rotation/shared";
-import { probeFile } from "../ffmpeg.js";
+import { probeFile, isHdr } from "../ffmpeg.js";
 import { withTmpDir, streamToFile, joinPath } from "../util/tmp.js";
 
 /**
@@ -28,7 +28,8 @@ export async function processProbe(job: ProbeJob): Promise<void> {
       const stream = await getObjectStream(clip.r2_key_original);
       await streamToFile(stream, local);
 
-      const { width, height, durationSeconds, rotation } = await probeFile(local);
+      const probe = await probeFile(local);
+      const { width, height, durationSeconds, rotation } = probe;
       // Use DISPLAY dimensions: a rotated (portrait iPhone) clip is coded
       // landscape, so swap w/h when rotated 90/270 before judging the aspect.
       const disp = displayDimensions(width, height, rotation);
@@ -40,6 +41,8 @@ export async function processProbe(job: ProbeJob): Promise<void> {
         // Same-aspect clips at a lower resolution are upscaled without a crop,
         // so this keys off aspect mismatch only (drives the reframe warning).
         needsResize: needsResize(disp.width, disp.height),
+        // Detect HDR once here so the render step doesn't have to re-probe.
+        isHdr: isHdr(probe),
       });
     });
   } catch (err) {

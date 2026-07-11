@@ -72,6 +72,7 @@ export interface Clip {
   needs_resize: boolean;
   crop_anchor_x: number;
   crop_anchor_y: number;
+  is_hdr: boolean;
   status: ClipStatus;
   archived_at: string | null;
   created_at: string;

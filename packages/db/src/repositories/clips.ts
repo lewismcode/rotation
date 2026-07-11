@@ -96,14 +96,22 @@ export async function setClipProbe(
     height: number;
     durationSeconds: number;
     needsResize: boolean;
+    isHdr: boolean;
   }
 ): Promise<void> {
   await query(
     `UPDATE clips
        SET width = $2, height = $3, duration_seconds = $4,
-           needs_resize = $5, status = 'ready'
+           needs_resize = $5, is_hdr = $6, status = 'ready'
      WHERE id = $1`,
-    [clipId, data.width, data.height, data.durationSeconds, data.needsResize]
+    [
+      clipId,
+      data.width,
+      data.height,
+      data.durationSeconds,
+      data.needsResize,
+      data.isHdr,
+    ]
   );
 }
 
