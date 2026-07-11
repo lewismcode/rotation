@@ -124,3 +124,15 @@ export async function objectExists(key: string): Promise<boolean> {
     return false;
   }
 }
+
+/** Actual stored byte size (from a HEAD), or null if the object isn't there. */
+export async function objectSize(key: string): Promise<number | null> {
+  try {
+    const res = await r2().send(
+      new HeadObjectCommand({ Bucket: bucket(), Key: key })
+    );
+    return res.ContentLength ?? null;
+  } catch {
+    return null;
+  }
+}
