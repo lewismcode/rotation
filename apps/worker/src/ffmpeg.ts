@@ -1,8 +1,11 @@
 import ffmpeg from "fluent-ffmpeg";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 const require = createRequire(import.meta.url);
+const pexec = promisify(execFile);
 
 /**
  * Resolve the ffmpeg/ffprobe binaries in priority order:
@@ -40,6 +43,9 @@ const ffprobePath =
 if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath);
 if (ffprobePath) ffmpeg.setFfprobePath(ffprobePath);
 
+/** Resolved ffprobe binary (path or PATH lookup) for direct JSON queries. */
+const ffprobeBin = ffprobePath ?? "ffprobe";
+
 console.log(
   `[ffmpeg] ffmpeg=${ffmpegPath ?? "(PATH)"} ffprobe=${ffprobePath ?? "(PATH)"}`
 );
@@ -47,26 +53,69 @@ console.log(
 export { ffmpeg };
 
 export interface ProbeResult {
+  /** Coded frame dimensions (before display rotation). */
   width: number;
   height: number;
   durationSeconds: number;
+  /** Clockwise rotation to apply for correct display: 0 | 90 | 180 | 270. */
+  rotation: number;
 }
 
-export function probeFile(path: string): Promise<ProbeResult> {
-  return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(path, (err, data) => {
-      if (err) return reject(err);
-      const stream = data.streams.find((s) => s.codec_type === "video");
-      if (!stream || !stream.width || !stream.height) {
-        return reject(new Error("No video stream found in file"));
-      }
-      const duration =
-        Number(data.format?.duration) || Number(stream.duration) || 0;
-      resolve({
-        width: stream.width,
-        height: stream.height,
-        durationSeconds: Number.isFinite(duration) ? duration : 0,
-      });
-    });
-  });
+/**
+ * Normalize rotation to the clockwise angle needed to display the frame
+ * upright. iPhone vertical clips store a landscape frame + a rotation flag, via
+ * either a Display Matrix side-data entry (counter-clockwise convention) or a
+ * legacy `rotate` tag (clockwise).
+ */
+interface FfprobeStreamJson {
+  codec_type?: string;
+  width?: number;
+  height?: number;
+  duration?: string;
+  tags?: { rotate?: string | number };
+  side_data_list?: Array<{ rotation?: number }>;
+}
+
+function readRotation(stream: FfprobeStreamJson): number {
+  let raw: number | undefined;
+  const sd = stream.side_data_list?.find((d) => typeof d.rotation === "number");
+  if (sd && typeof sd.rotation === "number") raw = -sd.rotation;
+  else if (stream.tags?.rotate != null) raw = Number(stream.tags.rotate);
+  if (raw == null || Number.isNaN(raw)) return 0;
+  return (((Math.round(raw / 90) * 90) % 360) + 360) % 360;
+}
+
+/**
+ * Probe via a direct `ffprobe -show_streams -of json` call so the Display
+ * Matrix side-data (iPhone rotation) is always present — fluent-ffmpeg's parser
+ * can drop nested arrays depending on version.
+ */
+export async function probeFile(path: string): Promise<ProbeResult> {
+  const { stdout } = await pexec(ffprobeBin, [
+    "-v",
+    "error",
+    "-select_streams",
+    "v:0",
+    "-show_streams",
+    "-show_format",
+    "-of",
+    "json",
+    path,
+  ]);
+  const data = JSON.parse(stdout) as {
+    streams?: FfprobeStreamJson[];
+    format?: { duration?: string };
+  };
+  const stream = (data.streams ?? []).find((s) => s.codec_type === "video");
+  if (!stream?.width || !stream?.height) {
+    throw new Error("No video stream found in file");
+  }
+  const duration =
+    Number(data.format?.duration) || Number(stream.duration) || 0;
+  return {
+    width: stream.width,
+    height: stream.height,
+    durationSeconds: Number.isFinite(duration) ? duration : 0,
+    rotation: readRotation(stream),
+  };
 }

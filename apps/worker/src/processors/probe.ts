@@ -23,8 +23,13 @@ export async function processProbe(job: ProbeJob): Promise<void> {
       const stream = await getObjectStream(clip.r2_key_original);
       await streamToFile(stream, local);
 
-      const { width, height, durationSeconds } = await probeFile(local);
-      const aspect = width / height;
+      const { width, height, durationSeconds, rotation } = await probeFile(local);
+      // Use DISPLAY dimensions: a rotated (portrait iPhone) clip is coded
+      // landscape, so swap w/h when rotated 90/270 before judging the aspect.
+      const rotated = rotation === 90 || rotation === 270;
+      const dispW = rotated ? height : width;
+      const dispH = rotated ? width : height;
+      const aspect = dispW / dispH;
       // needs_resize drives the "will be cropped/reframed" warning, so it keys
       // off aspect mismatch only. A same-aspect clip at a different resolution
       // (e.g. 720x1280) is upscaled by the render step without reframing, so it
@@ -32,8 +37,8 @@ export async function processProbe(job: ProbeJob): Promise<void> {
       const needsResize = Math.abs(aspect - REELS.ASPECT) > ASPECT_TOLERANCE;
 
       await clipsRepo.setClipProbe(clip.id, {
-        width,
-        height,
+        width: dispW,
+        height: dispH,
         durationSeconds,
         needsResize,
       });
