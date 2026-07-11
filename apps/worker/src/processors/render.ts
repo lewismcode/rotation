@@ -1,12 +1,12 @@
 import { clipsRepo, hooksRepo, rendersRepo, batchesRepo } from "@rotation/db";
 import {
   getObjectStream,
-  putObject,
+  uploadStream,
   R2_PREFIX,
   outputFilename,
   type RenderJob,
 } from "@rotation/shared";
-import { readFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import { compositeReel, extractThumbnail } from "../composite.js";
 import { probeFile, isHdr } from "../ffmpeg.js";
 import { renderHookPng } from "../overlay/renderHookPng.js";
@@ -71,12 +71,13 @@ export async function processRender(job: RenderJob): Promise<void> {
         anchor: { x: clip.crop_anchor_x, y: clip.crop_anchor_y },
         hdr,
       });
-      // 4. upload output
-      await putObject(outKey, await readFile(outPath), "video/mp4");
+      // 4. upload output — stream from disk (never buffer the whole MP4 in
+      // memory; two concurrent large reels could otherwise OOM the worker).
+      await uploadStream(outKey, createReadStream(outPath), "video/mp4");
       // 5. thumbnail (best-effort — a missing thumb shouldn't fail the render)
       try {
         await extractThumbnail(outPath, thumbPath);
-        await putObject(thumbKey, await readFile(thumbPath), "image/jpeg");
+        await uploadStream(thumbKey, createReadStream(thumbPath), "image/jpeg");
         thumbUploaded = true;
       } catch (err) {
         console.warn(
