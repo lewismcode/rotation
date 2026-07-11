@@ -1,87 +1,110 @@
-import { ffmpeg, probeFile } from "./ffmpeg.js";
+import { unlink } from "node:fs/promises";
+import { ffmpeg } from "./ffmpeg.js";
 import { REELS } from "@rotation/shared";
-
-/** Bake the display rotation into pixels (filter_complex disables autorotate). */
-function transposePrefix(rotation: number): string {
-  if (rotation === 90) return "transpose=1,";
-  if (rotation === 270) return "transpose=2,";
-  if (rotation === 180) return "transpose=1,transpose=1,";
-  return "";
-}
 
 type AudioMode = "aac" | "copy" | "none";
 
-function audioOptions(mode: AudioMode): string[] {
-  if (mode === "none") return ["-an"];
-  if (mode === "copy") return ["-map", "0:a:0?", "-c:a", "copy"];
-  return ["-map", "0:a:0?", "-c:a", "aac", "-b:a", REELS.AUDIO_BITRATE];
+function errTail(stderr: string | null): string {
+  return stderr ? `\n${stderr.split("\n").slice(-8).join("\n")}` : "";
 }
 
 /**
- * The single ffmpeg composite step, extracted so both the render processor and
- * tooling/demos exercise the exact same pixels.
+ * Two-pass composite so ffmpeg handles rotation natively (a `-vf` simple
+ * filtergraph autorotates from the display matrix — no fragile manual sign
+ * guessing across ffmpeg versions):
  *
- *   [0:v] rotate upright, scale to cover 1080x1920, center-crop, force 8-bit
- *         yuv420p (so HDR/10-bit iPhone footage doesn't break the overlay), reset
- *         SAR                                                          -> [base]
- *   [base][1:v] overlay caption png                                    -> [v]
- *
- * Audio is resilient: transcode to AAC when possible, else copy the source
- * stream untouched (some phone clips carry audio ffmpeg can't re-encode), else
- * drop it — a silent reel beats a failed render.
+ *   Pass 1 (-vf): autorotate upright, scale to cover 1080x1920, center-crop,
+ *                 force 8-bit yuv420p (HDR/10-bit safe). Resilient audio:
+ *                 transcode to AAC → copy source → drop (a silent reel beats a
+ *                 failed render).
+ *   Pass 2:       overlay the caption PNG and encode at the Reels target.
  */
 export async function compositeReel(
   inputPath: string,
   overlayPath: string,
   outputPath: string
 ): Promise<void> {
-  let rotation = 0;
+  const basePath = `${outputPath}.base.mp4`;
   try {
-    rotation = (await probeFile(inputPath)).rotation;
-  } catch {
-    /* fall back to no rotation */
-  }
-
-  const modes: AudioMode[] = ["aac", "copy", "none"];
-  let lastErr: Error | null = null;
-  for (const mode of modes) {
-    try {
-      await runComposite(inputPath, overlayPath, outputPath, rotation, mode);
-      if (mode !== "aac") {
-        console.log(`[render] audio fallback used: ${mode} (${inputPath})`);
+    let lastErr: Error | null = null;
+    let done = false;
+    for (const mode of ["aac", "copy", "none"] as AudioMode[]) {
+      try {
+        await uprightResize(inputPath, basePath, mode);
+        if (mode !== "aac") {
+          console.log(`[render] audio fallback used: ${mode} (${inputPath})`);
+        }
+        done = true;
+        break;
+      } catch (err) {
+        lastErr = err as Error;
       }
-      return;
-    } catch (err) {
-      lastErr = err as Error;
-      // ffmpeg fails fast at init on audio problems, so retrying is cheap.
     }
+    if (!done) throw lastErr ?? new Error("ffmpeg resize failed");
+
+    await overlayCaption(basePath, overlayPath, outputPath);
+  } finally {
+    await unlink(basePath).catch(() => {});
   }
-  throw lastErr ?? new Error("ffmpeg composite failed");
 }
 
-function runComposite(
+/** Pass 1: ffmpeg-native autorotate + cover-crop to 1080x1920 (no -map so the
+ * filtered video + audio auto-map; -map would disable video mapping). */
+function uprightResize(
   inputPath: string,
-  overlayPath: string,
-  outputPath: string,
-  rotation: number,
+  basePath: string,
   audioMode: AudioMode
 ): Promise<void> {
   const { WIDTH, HEIGHT } = REELS;
-  const pre = transposePrefix(rotation);
+  const audio =
+    audioMode === "none"
+      ? ["-an"]
+      : audioMode === "copy"
+        ? ["-c:a", "copy"]
+        : ["-c:a", "aac", "-b:a", REELS.AUDIO_BITRATE];
 
   return new Promise((resolve, reject) => {
     ffmpeg()
       .input(inputPath)
-      .input(overlayPath)
-      .complexFilter([
-        `[0:v]${pre}scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
-          `crop=${WIDTH}:${HEIGHT},format=yuv420p,setsar=1[base]`,
-        `[base][1:v]overlay=0:0[v]`,
+      .videoFilters(
+        `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
+          `crop=${WIDTH}:${HEIGHT},format=yuv420p,setsar=1`
+      )
+      .outputOptions([
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "18",
+        ...audio,
+        "-movflags",
+        "+faststart",
       ])
+      .on("end", () => resolve())
+      .on("error", (err: Error, _o: string | null, stderr: string | null) =>
+        reject(new Error(`${err.message}${errTail(stderr)}`))
+      )
+      .save(basePath);
+  });
+}
+
+/** Pass 2: overlay the caption onto the already-upright base and encode. */
+function overlayCaption(
+  basePath: string,
+  overlayPath: string,
+  outputPath: string
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    ffmpeg()
+      .input(basePath)
+      .input(overlayPath)
+      .complexFilter(["[0:v][1:v]overlay=0:0[v]"])
       .outputOptions([
         "-map",
         "[v]",
-        ...audioOptions(audioMode),
+        "-map",
+        "0:a?",
         "-c:v",
         "libx264",
         "-preset",
@@ -96,18 +119,16 @@ function runComposite(
         REELS.VIDEO_MAXRATE,
         "-bufsize",
         REELS.VIDEO_BUFSIZE,
+        "-c:a",
+        "copy",
         "-movflags",
         "+faststart",
-        // pixels are already upright; clear any rotation metadata.
-        "-metadata:s:v:0",
-        "rotate=0",
         "-shortest",
       ])
       .on("end", () => resolve())
-      .on("error", (err: Error, _stdout: string | null, stderr: string | null) => {
-        const tail = stderr ? `\n${stderr.split("\n").slice(-8).join("\n")}` : "";
-        reject(new Error(`${err.message}${tail}`));
-      })
+      .on("error", (err: Error, _o: string | null, stderr: string | null) =>
+        reject(new Error(`${err.message}${errTail(stderr)}`))
+      )
       .save(outputPath);
   });
 }

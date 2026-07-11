@@ -95,22 +95,22 @@ function DownloadButton({ renderId }: { renderId: string }) {
   );
 }
 
+/**
+ * One button: "Download all". Builds the zip (server-side), waits, then triggers
+ * the download. No separate zip/ready states to clutter the UI.
+ */
 function ZipButton({ batchId }: { batchId: string }) {
-  const [state, setState] = useState<"idle" | "building" | "ready">("idle");
-  const [url, setUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  async function buildZip() {
-    setState("building");
+  async function downloadAll() {
+    setBusy(true);
     try {
       const post = await fetch(`/api/batches/${batchId}/zip`, { method: "POST" });
       if (!post.ok) {
         const { error } = await post.json().catch(() => ({}));
-        throw new Error(error || "Could not start zip");
+        throw new Error(error || "Could not prepare download");
       }
-      // Poll until the worker has uploaded the zip. The status endpoint returns
-      // 202 (still ok!) with { ready: false } while building, and 200 with
-      // { ready: true, url } once done — so gate on `ready`+`url`, never on
-      // res.ok alone (a 202 with no url would navigate to /batches/undefined).
+      // Poll until ready (202 while building, 200 { ready, url } when done).
       const started = Date.now();
       while (Date.now() - started < 5 * 60 * 1000) {
         await new Promise((r) => setTimeout(r, 2500));
@@ -120,38 +120,26 @@ function ZipButton({ batchId }: { batchId: string }) {
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
           if (data.ready && data.url) {
-            setUrl(data.url);
-            setState("ready");
             window.location.href = data.url;
             return;
           }
         }
       }
-      throw new Error("Zip timed out");
+      throw new Error("Preparing the download timed out — try again");
     } catch (err) {
-      setState("idle");
       alert((err as Error).message);
+    } finally {
+      setBusy(false);
     }
-  }
-
-  if (state === "ready" && url) {
-    return (
-      <a
-        href={url}
-        className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-[#141310] hover:opacity-90"
-      >
-        Download .zip
-      </a>
-    );
   }
 
   return (
     <button
-      onClick={buildZip}
-      disabled={state === "building"}
-      className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-[#141310] transition-opacity hover:opacity-90 disabled:opacity-60"
+      onClick={downloadAll}
+      disabled={busy}
+      className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-[#141310] shadow-lg shadow-[var(--accent-soft)] transition-opacity hover:opacity-90 disabled:opacity-70"
     >
-      {state === "building" ? "Zipping…" : "Download all (.zip)"}
+      {busy ? "Preparing…" : "Download all"}
     </button>
   );
 }
