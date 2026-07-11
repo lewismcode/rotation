@@ -92,11 +92,30 @@ export async function processRender(job: RenderJob): Promise<void> {
       thumbUploaded ? thumbKey : null
     );
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    await rendersRepo.failRender(render.id, message);
-    await batchesRepo.refreshBatchStatus(render.batch_id);
+    // Deliberately do NOT mark the render failed here: BullMQ may still
+    // auto-retry this job. Marking it 'failed' now would (a) flip the batch
+    // out of 'processing' prematurely and (b) enable the manual Retry button
+    // while an automatic retry is still in flight — the two would then render
+    // the same clip×hook concurrently. The queue's 'failed' handler reconciles
+    // the DB once, only after attempts are exhausted (see markRenderFailedFinal).
     throw err;
   }
 
+  await batchesRepo.refreshBatchStatus(render.batch_id);
+}
+
+/**
+ * Reconcile the DB after BullMQ has exhausted a render job's attempts (or it
+ * stalled past recovery, e.g. the worker was killed mid-encode). Called from
+ * the queue 'failed' handler on the final attempt only, so it never races an
+ * in-flight auto-retry. No-op if the render vanished or already completed.
+ */
+export async function markRenderFailedFinal(
+  job: RenderJob,
+  message: string
+): Promise<void> {
+  const render = await rendersRepo.getRenderScoped(job.labelId, job.renderId);
+  if (!render || render.status === "complete") return;
+  await rendersRepo.failRender(render.id, message);
   await batchesRepo.refreshBatchStatus(render.batch_id);
 }

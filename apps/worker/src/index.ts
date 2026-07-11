@@ -8,8 +8,8 @@ import {
   type RenderJob,
   type ZipJob,
 } from "@rotation/shared";
-import { processProbe } from "./processors/probe.js";
-import { processRender } from "./processors/render.js";
+import { processProbe, markClipFailedFinal } from "./processors/probe.js";
+import { processRender, markRenderFailedFinal } from "./processors/render.js";
 import { processZip } from "./processors/zip.js";
 import { processPurge } from "./processors/purge.js";
 
@@ -64,6 +64,17 @@ void purgeQueue
   .add("purge-startup", {}, { removeOnComplete: true, removeOnFail: true })
   .catch(() => {});
 
+// A job only "really" failed once BullMQ has spent every attempt (or stalled
+// past recovery). Until then it will be retried, so we neither alert nor touch
+// the DB — that's what prevents a transient failure from racing a manual retry.
+function isFinalAttempt(job?: {
+  attemptsMade: number;
+  opts?: { attempts?: number };
+}): boolean {
+  if (!job) return true;
+  return job.attemptsMade >= (job.opts?.attempts ?? 1);
+}
+
 for (const [name, w] of [
   ["probe", probeWorker],
   ["render", renderWorker],
@@ -71,11 +82,33 @@ for (const [name, w] of [
   ["purge", purgeWorker],
 ] as const) {
   w.on("failed", (job, err) => {
-    console.error(`[${name}] job ${job?.id} failed:`, err?.message);
-    captureError(err, { queue: name, jobId: job?.id });
+    const final = isFinalAttempt(job);
+    console.error(
+      `[${name}] job ${job?.id} failed${final ? "" : " (will retry)"}:`,
+      err?.message
+    );
+    if (final) captureError(err, { queue: name, jobId: job?.id });
   });
   w.on("completed", (job) => console.log(`[${name}] job ${job.id} completed`));
 }
+
+// Reconcile the DB once (and only once) a job's attempts are exhausted — this
+// also covers a worker killed mid-job: BullMQ recovers the stalled job, retries
+// it, and if it still can't finish this fires and clears the stuck row.
+renderWorker.on("failed", (job, err) => {
+  if (isFinalAttempt(job) && job?.data) {
+    void markRenderFailedFinal(job.data, err?.message ?? "Render failed").catch(
+      (e) => console.error("[render] reconcile failed:", e?.message)
+    );
+  }
+});
+probeWorker.on("failed", (job, err) => {
+  if (isFinalAttempt(job) && job?.data) {
+    void markClipFailedFinal(job.data).catch((e) =>
+      console.error("[probe] reconcile failed:", e?.message)
+    );
+  }
+});
 
 const app = express();
 app.get("/health", (_req, res) => res.json({ ok: true, service: "worker" }));

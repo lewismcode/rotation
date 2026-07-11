@@ -43,7 +43,20 @@ export async function processProbe(job: ProbeJob): Promise<void> {
       });
     });
   } catch (err) {
-    await clipsRepo.setClipStatus(clip.id, "failed");
+    // Leave the status alone (still 'probing') and rethrow so BullMQ retries.
+    // The 'failed' handler flips it to 'failed' only once attempts are spent,
+    // so a transient probe error doesn't blink the clip to failed mid-retry.
     throw err;
   }
+}
+
+/**
+ * Mark a clip failed after its probe job has exhausted all attempts. Called
+ * from the queue 'failed' handler only. No-op if the clip vanished or a retry
+ * already succeeded (status 'ready').
+ */
+export async function markClipFailedFinal(job: ProbeJob): Promise<void> {
+  const clip = await clipsRepo.getClipScoped(job.labelId, job.clipId);
+  if (!clip || clip.status === "ready") return;
+  await clipsRepo.setClipStatus(clip.id, "failed");
 }
