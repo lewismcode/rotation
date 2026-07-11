@@ -20,6 +20,16 @@ const MAX_WIDTH_FRACTION = 0.86;
 const LEFT_MARGIN_FRACTION = 0.08;
 const ITALIC_SHEAR = -0.2;
 
+// Bundled fonts have no color-emoji glyphs (Apple's are proprietary), which
+// renders emoji as a "tofu" box. Strip emoji, variation selectors, ZWJ joiners
+// and regional-indicator flags from the caption, then tidy leftover whitespace.
+const EMOJI_RE =
+  /(?:\p{Extended_Pictographic}|️|‍|[\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}])/gu;
+
+function stripEmoji(text: string): string {
+  return text.replace(EMOJI_RE, "").replace(/\s{2,}/g, " ").trim();
+}
+
 function applyCase(text: string, c: CaptionStyleConfig["case"]): string {
   return c === "upper" ? text.toUpperCase() : text;
 }
@@ -106,7 +116,8 @@ export function renderHookPng(
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
 
-  const content = applyCase(text, style.case);
+  const content = applyCase(stripEmoji(text), style.case);
+  if (!content) return canvas.toBuffer("image/png"); // emoji-only hook → no caption
   const maxTextWidth = frame.width * MAX_WIDTH_FRACTION;
   const lines = wrapLines(ctx, content, maxTextWidth, ls);
 

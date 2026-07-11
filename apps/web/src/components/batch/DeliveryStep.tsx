@@ -107,17 +107,24 @@ function ZipButton({ batchId }: { batchId: string }) {
         const { error } = await post.json().catch(() => ({}));
         throw new Error(error || "Could not start zip");
       }
-      // Poll until the worker has uploaded the zip.
+      // Poll until the worker has uploaded the zip. The status endpoint returns
+      // 202 (still ok!) with { ready: false } while building, and 200 with
+      // { ready: true, url } once done — so gate on `ready`+`url`, never on
+      // res.ok alone (a 202 with no url would navigate to /batches/undefined).
       const started = Date.now();
       while (Date.now() - started < 5 * 60 * 1000) {
         await new Promise((r) => setTimeout(r, 2500));
-        const res = await fetch(`/api/batches/${batchId}/zip`);
+        const res = await fetch(`/api/batches/${batchId}/zip`, {
+          cache: "no-store",
+        });
         if (res.ok) {
-          const { url } = await res.json();
-          setUrl(url);
-          setState("ready");
-          window.location.href = url;
-          return;
+          const data = await res.json().catch(() => ({}));
+          if (data.ready && data.url) {
+            setUrl(data.url);
+            setState("ready");
+            window.location.href = data.url;
+            return;
+          }
         }
       }
       throw new Error("Zip timed out");
