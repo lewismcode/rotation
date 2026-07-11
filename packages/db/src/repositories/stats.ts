@@ -93,3 +93,83 @@ export async function getDashboard(labelId: string): Promise<DashboardStats> {
     })),
   };
 }
+
+export interface RosterRow {
+  userId: string;
+  clerkUserId: string;
+  role: string;
+  batches: number;
+  reels: number;
+  lastActive: string | null;
+}
+
+/** Per-member activity for the roster, joined to Clerk profiles by the caller. */
+export async function getRoster(labelId: string): Promise<RosterRow[]> {
+  const { rows } = await query<{
+    id: string;
+    clerk_user_id: string;
+    role: string;
+    batches: string;
+    reels: string;
+    last_active: string | null;
+  }>(
+    `SELECT u.id, u.clerk_user_id, u.role,
+        count(DISTINCT b.id) AS batches,
+        count(r.id) FILTER (WHERE r.status = 'complete') AS reels,
+        max(b.created_at) AS last_active
+     FROM users u
+       LEFT JOIN batches b ON b.created_by_user_id = u.id
+       LEFT JOIN renders r ON r.batch_id = b.id
+     WHERE u.label_id = $1
+     GROUP BY u.id
+     ORDER BY reels DESC, last_active DESC NULLS LAST`,
+    [labelId]
+  );
+  return rows.map((r) => ({
+    userId: r.id,
+    clerkUserId: r.clerk_user_id,
+    role: r.role,
+    batches: Number(r.batches),
+    reels: Number(r.reels),
+    lastActive: r.last_active,
+  }));
+}
+
+/** Completed reels per day over the last `days`, zero-filled for a clean chart. */
+export async function getActivity(
+  labelId: string,
+  days = 14
+): Promise<Array<{ day: string; count: number }>> {
+  const { rows } = await query<{ day: string; count: string }>(
+    `SELECT to_char(d, 'YYYY-MM-DD') AS day, COALESCE(x.cnt, 0) AS count
+     FROM generate_series(
+            date_trunc('day', now()) - (($2::int - 1) || ' days')::interval,
+            date_trunc('day', now()),
+            '1 day'
+          ) d
+       LEFT JOIN (
+         SELECT date_trunc('day', r.completed_at) AS day, count(*) AS cnt
+         FROM renders r JOIN batches b ON b.id = r.batch_id
+         WHERE b.label_id = $1 AND r.status = 'complete'
+         GROUP BY 1
+       ) x ON x.day = d
+     ORDER BY d`,
+    [labelId, days]
+  );
+  return rows.map((r) => ({ day: r.day, count: Number(r.count) }));
+}
+
+/** Render count per caption style (usage breakdown). */
+export async function getStyleBreakdown(
+  labelId: string
+): Promise<Array<{ style: string; count: number }>> {
+  const { rows } = await query<{ style: string; count: string }>(
+    `SELECT r.caption_style AS style, count(*) AS count
+     FROM renders r JOIN batches b ON b.id = r.batch_id
+     WHERE b.label_id = $1
+     GROUP BY r.caption_style
+     ORDER BY count DESC`,
+    [labelId]
+  );
+  return rows.map((r) => ({ style: r.style, count: Number(r.count) }));
+}

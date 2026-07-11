@@ -3,12 +3,18 @@ import { statsRepo } from "@rotation/db";
 import { requireContextOrRedirect } from "@/lib/context";
 import { NewBatchButton } from "@/components/NewBatchButton";
 import { StatusPill } from "@/components/StatusPill";
+import { ActivityChart } from "@/components/dashboard/ActivityChart";
+import { StyleBreakdown } from "@/components/dashboard/StyleBreakdown";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const ctx = await requireContextOrRedirect();
-  const stats = await statsRepo.getDashboard(ctx.label.id);
+  const [stats, activity, styles] = await Promise.all([
+    statsRepo.getDashboard(ctx.label.id),
+    statsRepo.getActivity(ctx.label.id, 14),
+    statsRepo.getStyleBreakdown(ctx.label.id),
+  ]);
   const firstName = ctx.label.display_name;
 
   return (
@@ -35,6 +41,12 @@ export default async function DashboardPage() {
         <Stat label="In progress" value={stats.rendersInProgress} />
         <Stat label="Batches" value={stats.batches} />
         <Stat label="Active hooks" value={stats.activeHooks} />
+      </div>
+
+      {/* Analytics */}
+      <div className="rise grid gap-4 lg:grid-cols-2">
+        <ActivityChart data={activity} />
+        <StyleBreakdown data={styles} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
