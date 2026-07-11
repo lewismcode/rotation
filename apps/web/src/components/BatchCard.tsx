@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { StatusPill } from "./StatusPill";
+import { Time } from "./Time";
 
 /**
  * Batches-list card. Clicking the body opens the batch; a hover trash button
@@ -47,7 +48,7 @@ export function BatchCard({
       <div className="flex flex-col">
         <span className="text-sm font-medium text-primary">{title}</span>
         <span className="data text-xs text-faint">
-          {new Date(createdAt).toLocaleString()}
+          <Time value={createdAt} />
         </span>
       </div>
       <div className="flex items-center gap-2">

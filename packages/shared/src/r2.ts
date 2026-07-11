@@ -7,6 +7,7 @@ import {
   type GetObjectCommandOutput,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Upload } from "@aws-sdk/lib-storage";
 import { serverEnv } from "./env.js";
 import { Readable } from "node:stream";
 
@@ -91,6 +92,23 @@ export async function putObject(
       ContentType: contentType,
     })
   );
+}
+
+/**
+ * Upload a stream of UNKNOWN length (e.g. a zip being built on the fly). Plain
+ * PutObject requires Content-Length, which S3/R2 rejects for streams; the
+ * multipart Upload helper handles it.
+ */
+export async function uploadStream(
+  key: string,
+  body: Readable,
+  contentType: string
+): Promise<void> {
+  const upload = new Upload({
+    client: r2(),
+    params: { Bucket: bucket(), Key: key, Body: body, ContentType: contentType },
+  });
+  await upload.done();
 }
 
 export async function deleteObject(key: string): Promise<void> {

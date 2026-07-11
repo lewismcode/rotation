@@ -3,7 +3,7 @@ import { PassThrough } from "node:stream";
 import { rendersRepo, clipsRepo, hooksRepo } from "@rotation/db";
 import {
   getObjectStream,
-  putObject,
+  uploadStream,
   R2_PREFIX,
   outputFilename,
   type ZipJob,
@@ -23,10 +23,14 @@ export async function processZip(job: ZipJob): Promise<string> {
   const passthrough = new PassThrough();
   archive.pipe(passthrough);
 
-  // Kick off the R2 upload consuming the archive stream.
-  const uploadPromise = putObject(zipKey, passthrough, "application/zip");
-
+  // Kick off the R2 multipart upload consuming the archive stream (unknown
+  // length). If the archive errors, surface it rather than hanging.
+  const uploadPromise = uploadStream(zipKey, passthrough, "application/zip");
   archive.on("warning", (err) => console.warn("[zip] warning", err));
+  archive.on("error", (err) => {
+    console.error("[zip] archive error", err);
+    passthrough.destroy(err);
+  });
 
   const seen = new Set<string>();
   for (const render of renders) {

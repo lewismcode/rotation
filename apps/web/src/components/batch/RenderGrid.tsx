@@ -1,13 +1,13 @@
 "use client";
 
+import { Fragment } from "react";
 import type { Clip, Hook, Render, RenderStatus } from "@rotation/shared/types";
 import { stemOf } from "@rotation/shared/slug";
 
 /**
- * The signature view: a live matrix of clips (rows) × hooks (columns). Each cell
- * is one render; it lights up as that specific output completes. This is both
- * the functional visualization of the output matrix and the batch's progress
- * indicator — no separate progress bar.
+ * The signature view: a live matrix of clips (rows) × hooks (columns), each cell
+ * one render lighting up as it completes. Columns are numbered and mapped to
+ * hook text in the legend below, so long hooks stay readable.
  */
 export function RenderGrid({
   clips,
@@ -26,7 +26,6 @@ export function RenderGrid({
     );
   }
 
-  // Only include clips/hooks that actually have renders in this batch.
   const clipIds = new Set(renders.map((r) => r.clip_id));
   const hookIds = new Set(renders.map((r) => r.hook_id));
   const rows = clips.filter((c) => clipIds.has(c.id));
@@ -37,72 +36,101 @@ export function RenderGrid({
 
   const done = renders.filter((r) => r.status === "complete").length;
   const failed = renders.filter((r) => r.status === "failed").length;
+  const pct = Math.round((done / renders.length) * 100);
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-4">
-        <span className="data text-sm">
-          <span style={{ color: "var(--complete)" }}>{done}</span>
-          <span className="text-secondary"> / {renders.length} complete</span>
-        </span>
-        {failed > 0 ? (
-          <span className="data text-xs" style={{ color: "#d98b6a" }}>
-            {failed} failed
+    <div className="space-y-5">
+      {/* progress */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <span className="data text-sm">
+            <span style={{ color: "var(--complete)" }}>{done}</span>
+            <span className="text-secondary"> / {renders.length} complete</span>
           </span>
-        ) : null}
+          {failed > 0 ? (
+            <span className="data text-xs" style={{ color: "#d98b6a" }}>
+              {failed} failed
+            </span>
+          ) : null}
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--glass-border)]">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${pct}%`, background: "var(--complete)" }}
+          />
+        </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="border-separate" style={{ borderSpacing: "6px" }}>
-          <thead>
-            <tr>
-              <th className="w-40" />
-              {cols.map((h) => (
-                <th
-                  key={h.id}
-                  className="data max-w-[120px] px-1 pb-1 text-left align-bottom text-[10px] font-normal text-secondary"
-                >
-                  <span className="line-clamp-2">{h.text}</span>
-                </th>
+      {/* matrix */}
+      <div className="overflow-x-auto pb-1">
+        <div
+          className="inline-grid items-center gap-2"
+          style={{
+            gridTemplateColumns: `minmax(110px, 1fr) repeat(${cols.length}, 40px)`,
+          }}
+        >
+          <div />
+          {cols.map((h, i) => (
+            <div
+              key={h.id}
+              className="data text-center text-[11px] text-faint"
+              title={h.text}
+            >
+              {i + 1}
+            </div>
+          ))}
+
+          {rows.map((clip) => (
+            <Fragment key={clip.id}>
+              <div
+                className="data truncate pr-3 text-xs text-secondary"
+                title={clip.original_filename}
+              >
+                {stemOf(clip.original_filename)}
+              </div>
+              {cols.map((hook) => (
+                <Cell
+                  key={hook.id}
+                  status={byPair.get(`${clip.id}:${hook.id}`)?.status ?? "queued"}
+                />
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((clip) => (
-              <tr key={clip.id}>
-                <td className="data max-w-[160px] truncate pr-2 text-xs text-secondary">
-                  {stemOf(clip.original_filename)}
-                </td>
-                {cols.map((hook) => {
-                  const r = byPair.get(`${clip.id}:${hook.id}`);
-                  return (
-                    <td key={hook.id}>
-                      <Cell status={r?.status ?? "queued"} />
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </Fragment>
+          ))}
+        </div>
       </div>
+
+      {/* legend */}
+      <ol className="space-y-1.5 border-t border-[var(--glass-border)] pt-4">
+        {cols.map((h, i) => (
+          <li key={h.id} className="flex items-start gap-2.5 text-xs">
+            <span
+              className="data mt-px grid h-4 w-4 shrink-0 place-items-center rounded-full text-[10px]"
+              style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+            >
+              {i + 1}
+            </span>
+            <span className="text-secondary">{h.text}</span>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
 
 function Cell({ status }: { status: RenderStatus }) {
   const base =
-    "h-8 w-8 rounded-[5px] border transition-all";
+    "grid h-10 w-10 place-items-center rounded-[10px] border transition-all";
   if (status === "complete") {
     return (
       <div
         className={`${base} cell-complete`}
-        style={{
-          background: "var(--complete)",
-          borderColor: "var(--complete)",
-        }}
+        style={{ background: "var(--complete)", borderColor: "var(--complete)" }}
         title="complete"
-      />
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      </div>
     );
   }
   if (status === "processing") {
@@ -110,26 +138,33 @@ function Cell({ status }: { status: RenderStatus }) {
       <div
         className={`${base} animate-pulse`}
         style={{
-          background: "color-mix(in srgb, var(--accent) 40%, transparent)",
+          background: "var(--accent-soft)",
           borderColor: "var(--accent)",
         }}
         title="rendering"
-      />
+      >
+        <span
+          className="h-2 w-2 rounded-full"
+          style={{ background: "var(--accent)" }}
+        />
+      </div>
     );
   }
   if (status === "failed") {
     return (
       <div
         className={base}
-        style={{ background: "transparent", borderColor: "#d98b6a" }}
+        style={{ background: "transparent", borderColor: "#c0553a", color: "#c0553a" }}
         title="failed"
-      />
+      >
+        <span className="text-sm leading-none">×</span>
+      </div>
     );
   }
   return (
     <div
       className={base}
-      style={{ background: "var(--bg)", borderColor: "var(--border)" }}
+      style={{ background: "transparent", borderColor: "var(--glass-border)" }}
       title="queued"
     />
   );

@@ -6,6 +6,7 @@ import type { CaptionStyle } from "@rotation/shared/caption-styles";
 import { StepShell, type StepState } from "./StepShell";
 import { BatchNameEditor } from "./BatchNameEditor";
 import { DeleteBatchButton } from "./DeleteBatchButton";
+import { Time } from "../Time";
 import { UploadStep } from "./UploadStep";
 import { HooksStep } from "./HooksStep";
 import { RenderGrid } from "./RenderGrid";
@@ -105,7 +106,7 @@ export function BatchFlow({
             labelSeq={detail.batch.label_seq}
           />
           <p className="data mt-1 text-xs text-faint">
-            {new Date(detail.batch.created_at).toLocaleString()}
+            <Time value={detail.batch.created_at} />
           </p>
         </div>
         <DeleteBatchButton batchId={detail.batch.id} />
