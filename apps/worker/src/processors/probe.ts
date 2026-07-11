@@ -1,5 +1,10 @@
 import { clipsRepo } from "@rotation/db";
-import { getObjectStream, ASPECT_TOLERANCE, REELS, type ProbeJob } from "@rotation/shared";
+import {
+  getObjectStream,
+  displayDimensions,
+  needsResize,
+  type ProbeJob,
+} from "@rotation/shared";
 import { probeFile } from "../ffmpeg.js";
 import { withTmpDir, streamToFile, joinPath } from "../util/tmp.js";
 
@@ -26,21 +31,15 @@ export async function processProbe(job: ProbeJob): Promise<void> {
       const { width, height, durationSeconds, rotation } = await probeFile(local);
       // Use DISPLAY dimensions: a rotated (portrait iPhone) clip is coded
       // landscape, so swap w/h when rotated 90/270 before judging the aspect.
-      const rotated = rotation === 90 || rotation === 270;
-      const dispW = rotated ? height : width;
-      const dispH = rotated ? width : height;
-      const aspect = dispW / dispH;
-      // needs_resize drives the "will be cropped/reframed" warning, so it keys
-      // off aspect mismatch only. A same-aspect clip at a different resolution
-      // (e.g. 720x1280) is upscaled by the render step without reframing, so it
-      // doesn't warrant the crop warning.
-      const needsResize = Math.abs(aspect - REELS.ASPECT) > ASPECT_TOLERANCE;
+      const disp = displayDimensions(width, height, rotation);
 
       await clipsRepo.setClipProbe(clip.id, {
-        width: dispW,
-        height: dispH,
+        width: disp.width,
+        height: disp.height,
         durationSeconds,
-        needsResize,
+        // Same-aspect clips at a lower resolution are upscaled without a crop,
+        // so this keys off aspect mismatch only (drives the reframe warning).
+        needsResize: needsResize(disp.width, disp.height),
       });
     });
   } catch (err) {

@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { batchesRepo, clipsRepo, hooksRepo, rendersRepo } from "@rotation/db";
 import { enqueueRenders } from "@rotation/queue";
-import { LIMITS, CAPTION_STYLE_IDS, DEFAULT_CAPTION_STYLE } from "@rotation/shared";
+import {
+  LIMITS,
+  CAPTION_STYLE_IDS,
+  DEFAULT_CAPTION_STYLE,
+  buildRenderPairs,
+} from "@rotation/shared";
 import { requireContext } from "@/lib/context";
 import { creatorScope } from "@/lib/scope";
 import { apiHandler, notFound, badRequest } from "@/lib/api";
@@ -52,8 +57,9 @@ export const POST = apiHandler(
       );
     }
 
-    const pairs = clips.flatMap((clip) =>
-      hooks.map((hook) => ({ clipId: clip.id, hookId: hook.id }))
+    const pairs = buildRenderPairs(
+      clips.map((c) => c.id),
+      hooks.map((h) => h.id)
     );
 
     const created = await rendersRepo.createRenders(batchId, pairs, captionStyle);

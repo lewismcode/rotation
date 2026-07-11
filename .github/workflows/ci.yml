@@ -1,0 +1,38 @@
+name: CI
+
+# Runs on every PR and on pushes to the main branches. Type-checks the whole
+# monorepo and runs the unit suite. Deliberately infra-free: the tests cover
+# pure logic (filtergraph, reframe rules, fan-out, HDR/rotation detection,
+# scoping) so no Postgres/Redis/R2/ffmpeg is needed.
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # ffmpeg/ffprobe static binaries are optionalDependencies; skip their
+      # download in CI (the tests don't spawn ffmpeg) to keep installs fast.
+      - name: Install dependencies
+        run: npm ci --no-optional
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test

@@ -1,5 +1,6 @@
 import { ffmpeg } from "./ffmpeg.js";
 import { REELS } from "@rotation/shared";
+import { buildCompositeGraph, type CropAnchor } from "./filters.js";
 
 type AudioMode = "aac" | "copy" | "none";
 
@@ -17,11 +18,6 @@ function errTail(stderr: string | null): string {
   return stderr ? `\n${stderr.split("\n").slice(-8).join("\n")}` : "";
 }
 
-// Escape a path for use inside ffmpeg's movie= filter argument.
-function escFilterPath(p: string): string {
-  return p.replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/:/g, "\\:");
-}
-
 /**
  * Single-pass composite. A `-vf` simple filtergraph is used (not
  * -filter_complex) so ffmpeg autorotates the input from its display matrix —
@@ -36,12 +32,7 @@ function escFilterPath(p: string): string {
  * (a silent reel beats a failed render). No explicit -map, so the filtered
  * video + audio auto-map (a -map would disable video mapping with -vf).
  */
-export interface CropAnchor {
-  /** Normalized 0..1 horizontal anchor (0 = left, 1 = right, 0.5 = center). */
-  x: number;
-  /** Normalized 0..1 vertical anchor (0 = top, 1 = bottom, 0.5 = center). */
-  y: number;
-}
+export type { CropAnchor };
 
 export interface CompositeOptions {
   anchor?: CropAnchor;
@@ -106,18 +97,6 @@ export async function extractThumbnail(
   }
 }
 
-// Clamp + format a normalized anchor for an ffmpeg expression. toFixed avoids
-// locale/scientific-notation surprises in the filter string.
-function anchorExpr(v: number): string {
-  return Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0.5)).toFixed(4);
-}
-
-// HDR (PQ/HLG, BT.2020) -> SDR (BT.709). Linearize, tone-map highlights with
-// Hable, then convert back to bt709 tv-range before the normal scale/crop.
-const TONEMAP =
-  "zscale=t=linear:npl=100,tonemap=tonemap=hable:desat=0," +
-  "zscale=t=bt709:m=bt709:p=bt709:r=tv,";
-
 function run(
   inputPath: string,
   overlayPath: string,
@@ -126,18 +105,7 @@ function run(
   anchor: CropAnchor,
   tonemap: boolean
 ): Promise<void> {
-  const { WIDTH, HEIGHT } = REELS;
-  // After scaling to cover 1080x1920, exactly one axis overflows; the crop x/y
-  // pan along it. (iw-WIDTH) or (ih-HEIGHT) is 0 on the non-overflowing axis, so
-  // the corresponding anchor has no effect — center stays center there.
-  const ax = anchorExpr(anchor.x);
-  const ay = anchorExpr(anchor.y);
-  const graph =
-    `${tonemap ? TONEMAP : ""}` +
-    `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
-    `crop=${WIDTH}:${HEIGHT}:(iw-${WIDTH})*${ax}:(ih-${HEIGHT})*${ay},` +
-    `format=yuv420p,setsar=1[b];` +
-    `movie='${escFilterPath(overlayPath)}'[h];[b][h]overlay=0:0`;
+  const graph = buildCompositeGraph({ overlayPath, anchor, tonemap });
 
   return new Promise((resolve, reject) => {
     ffmpeg()

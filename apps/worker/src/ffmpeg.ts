@@ -100,13 +100,18 @@ interface FfprobeStreamJson {
   side_data_list?: Array<{ rotation?: number }>;
 }
 
+/** Snap an arbitrary rotation to the clockwise 0/90/180/270 display angle. */
+export function normalizeRotation(raw: number | undefined | null): number {
+  if (raw == null || Number.isNaN(raw)) return 0;
+  return (((Math.round(raw / 90) * 90) % 360) + 360) % 360;
+}
+
 function readRotation(stream: FfprobeStreamJson): number {
   let raw: number | undefined;
   const sd = stream.side_data_list?.find((d) => typeof d.rotation === "number");
   if (sd && typeof sd.rotation === "number") raw = -sd.rotation;
   else if (stream.tags?.rotate != null) raw = Number(stream.tags.rotate);
-  if (raw == null || Number.isNaN(raw)) return 0;
-  return (((Math.round(raw / 90) * 90) % 360) + 360) % 360;
+  return normalizeRotation(raw);
 }
 
 /**

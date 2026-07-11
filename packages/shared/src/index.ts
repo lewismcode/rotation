@@ -1,6 +1,7 @@
 export * from "./types.js";
 export * from "./constants.js";
 export * from "./slug.js";
+export * from "./media.js";
 export * from "./captionStyles.js";
 export * from "./starterHooks.js";
 export * from "./r2.js";
