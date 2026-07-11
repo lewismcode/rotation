@@ -9,6 +9,14 @@ function transposePrefix(rotation: number): string {
   return "";
 }
 
+type AudioMode = "aac" | "copy" | "none";
+
+function audioOptions(mode: AudioMode): string[] {
+  if (mode === "none") return ["-an"];
+  if (mode === "copy") return ["-map", "0:a:0?", "-c:a", "copy"];
+  return ["-map", "0:a:0?", "-c:a", "aac", "-b:a", REELS.AUDIO_BITRATE];
+}
+
 /**
  * The single ffmpeg composite step, extracted so both the render processor and
  * tooling/demos exercise the exact same pixels.
@@ -18,22 +26,47 @@ function transposePrefix(rotation: number): string {
  *         SAR                                                          -> [base]
  *   [base][1:v] overlay caption png                                    -> [v]
  *
- * Rotation is read from the input so portrait iPhone clips (coded landscape +
- * rotation flag) come out upright. Output rotation metadata is cleared so
- * players don't double-rotate. Audio is passed through if present (0:a?).
+ * Audio is resilient: transcode to AAC when possible, else copy the source
+ * stream untouched (some phone clips carry audio ffmpeg can't re-encode), else
+ * drop it — a silent reel beats a failed render.
  */
 export async function compositeReel(
   inputPath: string,
   overlayPath: string,
   outputPath: string
 ): Promise<void> {
-  const { WIDTH, HEIGHT } = REELS;
   let rotation = 0;
   try {
     rotation = (await probeFile(inputPath)).rotation;
   } catch {
-    // If probing fails here, fall back to no rotation.
+    /* fall back to no rotation */
   }
+
+  const modes: AudioMode[] = ["aac", "copy", "none"];
+  let lastErr: Error | null = null;
+  for (const mode of modes) {
+    try {
+      await runComposite(inputPath, overlayPath, outputPath, rotation, mode);
+      if (mode !== "aac") {
+        console.log(`[render] audio fallback used: ${mode} (${inputPath})`);
+      }
+      return;
+    } catch (err) {
+      lastErr = err as Error;
+      // ffmpeg fails fast at init on audio problems, so retrying is cheap.
+    }
+  }
+  throw lastErr ?? new Error("ffmpeg composite failed");
+}
+
+function runComposite(
+  inputPath: string,
+  overlayPath: string,
+  outputPath: string,
+  rotation: number,
+  audioMode: AudioMode
+): Promise<void> {
+  const { WIDTH, HEIGHT } = REELS;
   const pre = transposePrefix(rotation);
 
   return new Promise((resolve, reject) => {
@@ -48,8 +81,7 @@ export async function compositeReel(
       .outputOptions([
         "-map",
         "[v]",
-        "-map",
-        "0:a?",
+        ...audioOptions(audioMode),
         "-c:v",
         "libx264",
         "-preset",
@@ -64,10 +96,6 @@ export async function compositeReel(
         REELS.VIDEO_MAXRATE,
         "-bufsize",
         REELS.VIDEO_BUFSIZE,
-        "-c:a",
-        "aac",
-        "-b:a",
-        REELS.AUDIO_BITRATE,
         "-movflags",
         "+faststart",
         // pixels are already upright; clear any rotation metadata.
