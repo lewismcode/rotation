@@ -33,12 +33,14 @@ function queues() {
   return made;
 }
 
+// NOTE: BullMQ forbids ":" in custom job ids (it's the internal Redis key
+// separator), so job ids use "-" as the separator.
 export async function enqueueProbe(job: ProbeJob): Promise<void> {
-  await queues().probe.add("probe", job, { jobId: `probe:${job.clipId}` });
+  await queues().probe.add("probe", job, { jobId: `probe-${job.clipId}` });
 }
 
 export async function enqueueRender(job: RenderJob): Promise<void> {
-  await queues().render.add("render", job, { jobId: `render:${job.renderId}` });
+  await queues().render.add("render", job, { jobId: `render-${job.renderId}` });
 }
 
 export async function enqueueRenders(jobs: RenderJob[]): Promise<void> {
@@ -47,11 +49,11 @@ export async function enqueueRenders(jobs: RenderJob[]): Promise<void> {
     jobs.map((job) => ({
       name: "render",
       data: job,
-      opts: { jobId: `render:${job.renderId}` },
+      opts: { jobId: `render-${job.renderId}` },
     }))
   );
 }
 
 export async function enqueueZip(job: ZipJob): Promise<void> {
-  await queues().zip.add("zip", job, { jobId: `zip:${job.batchId}:${Date.now()}` });
+  await queues().zip.add("zip", job, { jobId: `zip-${job.batchId}-${Date.now()}` });
 }
