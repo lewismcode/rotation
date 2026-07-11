@@ -65,7 +65,10 @@ export function BatchFlow({
   const currentStep = useMemo(() => {
     if (!confirmed) return stage === "upload" ? 0 : 1;
     if (detail.batch.status === "processing") return 2;
-    return 3; // complete / failed → delivery
+    // Every render failed → keep the user on the Render step, which has the
+    // per-render failure list + Retry, rather than an empty Download step.
+    if (detail.batch.status === "failed") return 2;
+    return 3; // complete (some/all done) → delivery
   }, [confirmed, stage, detail.batch.status]);
 
   // Keep the open step tracking the active one, unless the user reopened a

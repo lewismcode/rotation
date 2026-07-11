@@ -25,9 +25,12 @@ export function DeliveryStep({
   const hookById = new Map(hooks.map((h) => [h.id, h]));
 
   if (complete.length === 0) {
+    const anyFailed = renders.some((r) => r.status === "failed");
     return (
       <p className="text-sm text-secondary">
-        Finished videos will show up here as they complete.
+        {anyFailed
+          ? "No finished videos yet — open the Render step above to see what failed and retry."
+          : "Finished videos will show up here as they complete."}
       </p>
     );
   }
