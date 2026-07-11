@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { Clip } from "@rotation/shared/types";
+import { CropControl } from "./CropControl";
 
 interface LocalUpload {
   name: string;
@@ -159,6 +160,7 @@ export function UploadStep({
             key={clip.id}
             clip={clip}
             removable={!locked}
+            editable={!locked}
             onRemove={async () => {
               await fetch(`/api/clips/${clip.id}`, { method: "DELETE" });
               await onChanged();
@@ -196,12 +198,16 @@ export function UploadStep({
 function ClipRow({
   clip,
   removable,
+  editable,
   onRemove,
 }: {
   clip: Clip;
   removable: boolean;
+  editable: boolean;
   onRemove: () => void | Promise<void>;
 }) {
+  const [cropOpen, setCropOpen] = useState(false);
+  const canCrop = editable && clip.status === "ready" && clip.needs_resize;
   const status =
     clip.status === "ready"
       ? clip.needs_resize
@@ -235,10 +241,21 @@ function ClipRow({
         </span>
       </div>
       {clip.status === "ready" && clip.needs_resize ? (
-        <p className="mt-2 text-xs" style={{ color: "var(--accent)" }}>
-          This video will be resized/cropped to fit Reels format (9:16).
-        </p>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <p className="text-xs" style={{ color: "var(--accent)" }}>
+            This video will be cropped to fit Reels (9:16).
+          </p>
+          {canCrop ? (
+            <button
+              onClick={() => setCropOpen((o) => !o)}
+              className="shrink-0 rounded-md border border-border px-2.5 py-1 text-[11px] text-primary hover:border-accent"
+            >
+              {cropOpen ? "Done" : "Adjust framing"}
+            </button>
+          ) : null}
+        </div>
       ) : null}
+      {canCrop && cropOpen ? <CropControl clip={clip} /> : null}
     </li>
   );
 }

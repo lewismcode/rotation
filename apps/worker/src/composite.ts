@@ -36,15 +36,23 @@ function escFilterPath(p: string): string {
  * (a silent reel beats a failed render). No explicit -map, so the filtered
  * video + audio auto-map (a -map would disable video mapping with -vf).
  */
+export interface CropAnchor {
+  /** Normalized 0..1 horizontal anchor (0 = left, 1 = right, 0.5 = center). */
+  x: number;
+  /** Normalized 0..1 vertical anchor (0 = top, 1 = bottom, 0.5 = center). */
+  y: number;
+}
+
 export async function compositeReel(
   inputPath: string,
   overlayPath: string,
-  outputPath: string
+  outputPath: string,
+  anchor: CropAnchor = { x: 0.5, y: 0.5 }
 ): Promise<void> {
   let lastErr: Error | null = null;
   for (const mode of ["aac", "copy", "none"] as AudioMode[]) {
     try {
-      await run(inputPath, overlayPath, outputPath, mode);
+      await run(inputPath, overlayPath, outputPath, mode, anchor);
       if (mode !== "aac") {
         console.log(`[render] audio fallback used: ${mode} (${inputPath})`);
       }
@@ -82,16 +90,29 @@ export async function extractThumbnail(
   }
 }
 
+// Clamp + format a normalized anchor for an ffmpeg expression. toFixed avoids
+// locale/scientific-notation surprises in the filter string.
+function anchorExpr(v: number): string {
+  return Math.min(1, Math.max(0, Number.isFinite(v) ? v : 0.5)).toFixed(4);
+}
+
 function run(
   inputPath: string,
   overlayPath: string,
   outputPath: string,
-  audioMode: AudioMode
+  audioMode: AudioMode,
+  anchor: CropAnchor
 ): Promise<void> {
   const { WIDTH, HEIGHT } = REELS;
+  // After scaling to cover 1080x1920, exactly one axis overflows; the crop x/y
+  // pan along it. (iw-WIDTH) or (ih-HEIGHT) is 0 on the non-overflowing axis, so
+  // the corresponding anchor has no effect — center stays center there.
+  const ax = anchorExpr(anchor.x);
+  const ay = anchorExpr(anchor.y);
   const graph =
     `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,` +
-    `crop=${WIDTH}:${HEIGHT},format=yuv420p,setsar=1[b];` +
+    `crop=${WIDTH}:${HEIGHT}:(iw-${WIDTH})*${ax}:(ih-${HEIGHT})*${ay},` +
+    `format=yuv420p,setsar=1[b];` +
     `movie='${escFilterPath(overlayPath)}'[h];[b][h]overlay=0:0`;
 
   return new Promise((resolve, reject) => {

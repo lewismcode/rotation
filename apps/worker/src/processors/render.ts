@@ -63,8 +63,11 @@ export async function processRender(job: RenderJob): Promise<void> {
       await streamToFile(await getObjectStream(clip.r2_key_original), inPath);
       // 2. caption overlay (per-render caption style)
       await bufferToFile(renderHookPng(hook.text, render.caption_style), pngPath);
-      // 3. composite + encode
-      await compositeReel(inPath, pngPath, outPath);
+      // 3. composite + encode (honoring the clip's manual crop anchor)
+      await compositeReel(inPath, pngPath, outPath, {
+        x: clip.crop_anchor_x,
+        y: clip.crop_anchor_y,
+      });
       // 4. upload output
       await putObject(outKey, await readFile(outPath), "video/mp4");
       // 5. thumbnail (best-effort — a missing thumb shouldn't fail the render)

@@ -101,6 +101,33 @@ export async function setClipProbe(
   );
 }
 
+/**
+ * Persist a manual crop anchor (normalized 0..1) for a clip. Label + creator
+ * scoped and clamped to [0,1]. Returns the updated clip, or null if it wasn't
+ * found / not owned. Allowed only while the clip is still editable (not yet
+ * confirmed into renders is enforced at the API layer via batch status).
+ */
+export async function setClipCrop(
+  labelId: string,
+  clipId: string,
+  x: number,
+  y: number,
+  createdByUserId?: string
+): Promise<Clip | null> {
+  const cx = Math.min(1, Math.max(0, x));
+  const cy = Math.min(1, Math.max(0, y));
+  const { rows } = await query<Clip>(
+    `UPDATE clips c SET crop_anchor_x = $3, crop_anchor_y = $4
+       FROM batches b
+     WHERE c.id = $1 AND c.batch_id = b.id AND b.label_id = $2
+       AND c.archived_at IS NULL
+       AND ($5::uuid IS NULL OR b.created_by_user_id = $5)
+     RETURNING c.*`,
+    [clipId, labelId, cx, cy, createdByUserId ?? null]
+  );
+  return rows[0] ?? null;
+}
+
 export async function setClipStatus(
   clipId: string,
   status: ClipStatus

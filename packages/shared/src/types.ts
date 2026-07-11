@@ -70,6 +70,8 @@ export interface Clip {
   height: number | null;
   duration_seconds: number | null;
   needs_resize: boolean;
+  crop_anchor_x: number;
+  crop_anchor_y: number;
   status: ClipStatus;
   archived_at: string | null;
   created_at: string;
