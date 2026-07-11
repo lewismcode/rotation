@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Clip, Hook, Render } from "@rotation/shared/types";
 import { outputFilename } from "@rotation/shared/slug";
 
@@ -128,14 +128,31 @@ function DownloadButton({ renderId }: { renderId: string }) {
 }
 
 /**
- * One button: "Download all". Builds the zip (server-side), waits, then triggers
- * the download. No separate zip/ready states to clutter the UI.
+ * "Download all": builds the zip server-side, polls until ready, then triggers
+ * the download. Shows elapsed time while building and surfaces errors inline.
+ * The poll is tied to the component's lifetime — if the step is collapsed (this
+ * unmounts), the loop stops and won't yank the user to a download later.
  */
 function ZipButton({ batchId }: { batchId: string }) {
   const [busy, setBusy] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [err, setErr] = useState<string | null>(null);
+  const cancelled = useRef(false);
+  useEffect(() => {
+    return () => {
+      cancelled.current = true;
+    };
+  }, []);
 
   async function downloadAll() {
     setBusy(true);
+    setErr(null);
+    setElapsed(0);
+    const started = Date.now();
+    const tick = setInterval(
+      () => setElapsed(Math.floor((Date.now() - started) / 1000)),
+      1000
+    );
     try {
       const post = await fetch(`/api/batches/${batchId}/zip`, { method: "POST" });
       if (!post.ok) {
@@ -143,35 +160,45 @@ function ZipButton({ batchId }: { batchId: string }) {
         throw new Error(error || "Could not prepare download");
       }
       // Poll until ready (202 while building, 200 { ready, url } when done).
-      const started = Date.now();
       while (Date.now() - started < 5 * 60 * 1000) {
+        if (cancelled.current) return;
         await new Promise((r) => setTimeout(r, 2500));
+        if (cancelled.current) return;
         const res = await fetch(`/api/batches/${batchId}/zip`, {
           cache: "no-store",
         });
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
           if (data.ready && data.url) {
+            if (cancelled.current) return;
             window.location.href = data.url;
             return;
           }
         }
       }
       throw new Error("Preparing the download timed out — try again");
-    } catch (err) {
-      alert((err as Error).message);
+    } catch (e) {
+      if (!cancelled.current) setErr((e as Error).message);
     } finally {
-      setBusy(false);
+      clearInterval(tick);
+      if (!cancelled.current) setBusy(false);
     }
   }
 
   return (
-    <button
-      onClick={downloadAll}
-      disabled={busy}
-      className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-[#141310] shadow-lg shadow-[var(--accent-soft)] transition-opacity hover:opacity-90 disabled:opacity-70"
-    >
-      {busy ? "Preparing…" : "Download all"}
-    </button>
+    <div className="flex flex-col items-end gap-1">
+      <button
+        onClick={downloadAll}
+        disabled={busy}
+        className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-[#141310] shadow-lg shadow-[var(--accent-soft)] transition-opacity hover:opacity-90 disabled:opacity-70"
+      >
+        {busy ? `Preparing… ${elapsed}s` : "Download all"}
+      </button>
+      {err ? (
+        <span className="text-xs" style={{ color: "#c0553a" }}>
+          {err}
+        </span>
+      ) : null}
+    </div>
   );
 }
