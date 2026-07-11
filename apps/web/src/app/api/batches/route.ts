@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { batchesRepo } from "@rotation/db";
 import { requireContext } from "@/lib/context";
+import { creatorScope } from "@/lib/scope";
 import { apiHandler } from "@/lib/api";
 
 export const runtime = "nodejs";
 
 export const GET = apiHandler(async () => {
   const ctx = await requireContext();
-  const batches = await batchesRepo.listBatches(ctx.label.id);
+  // Creator-scoped: artists only see their own batches (admins see the label).
+  const batches = await batchesRepo.listBatches(ctx.label.id, creatorScope(ctx));
   return NextResponse.json({ batches });
 });
 

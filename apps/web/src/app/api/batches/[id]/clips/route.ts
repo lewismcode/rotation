@@ -7,6 +7,7 @@ import {
   R2_PREFIX,
   LIMITS,
   ALLOWED_VIDEO_MIME,
+  sanitizeFilename,
 } from "@rotation/shared";
 import { requireContext } from "@/lib/context";
 import { creatorScope } from "@/lib/scope";
@@ -54,8 +55,14 @@ export const POST = apiHandler(
     }
 
     // Reserve the clip id so the R2 key is stable before the row is inserted.
+    // Sanitize the name for the key (the raw name is kept for display).
     const clipId = randomUUID();
-    const key = R2_PREFIX.original(ctx.label.id, batchId, clipId, filename);
+    const key = R2_PREFIX.original(
+      ctx.label.id,
+      batchId,
+      clipId,
+      sanitizeFilename(filename)
+    );
 
     const clip = await clipsRepo.createClip({
       id: clipId,

@@ -26,6 +26,23 @@ export function stemOf(filename: string): string {
   return dot > 0 ? base.slice(0, dot) : base;
 }
 
+/**
+ * Sanitize an uploaded filename before it becomes the trailing segment of an
+ * R2 key: drop any path, strip control chars, and neutralize separators. The
+ * UUID prefixes already prevent tenant escape; this just avoids weird/colliding
+ * keys and header quirks when the name is echoed into Content-Disposition.
+ */
+export function sanitizeFilename(name: string): string {
+  const cleaned = name
+    .replace(/^.*[\\/]/, "") // drop any path component
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f\x7f]/g, "") // control chars
+    .replace(/[\\/]/g, "_") // any residual separators
+    .trim()
+    .slice(0, 200);
+  return cleaned || "clip";
+}
+
 export function outputFilename(originalFilename: string, hookText: string): string {
   const stem = slugify(stemOf(originalFilename), 60);
   const hook = slugify(hookText, 40);

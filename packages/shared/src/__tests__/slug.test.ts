@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { slugify, stemOf, outputFilename } from "../slug.js";
+import { slugify, stemOf, outputFilename, sanitizeFilename } from "../slug.js";
 import { batchDisplayName } from "../types.js";
 import {
   getCaptionStyle,
@@ -36,6 +36,22 @@ describe("stemOf", () => {
 
   it("keeps dotfiles intact", () => {
     expect(stemOf(".gitignore")).toBe(".gitignore");
+  });
+});
+
+describe("sanitizeFilename", () => {
+  it("drops path components and separators", () => {
+    expect(sanitizeFilename("/Users/x/../clips/IMG.mov")).toBe("IMG.mov");
+    expect(sanitizeFilename("a/b\\c.mp4")).toBe("c.mp4");
+  });
+
+  it("strips control characters", () => {
+    expect(sanitizeFilename("na\x01me\x1f.mp4")).toBe("name.mp4");
+  });
+
+  it("never returns empty", () => {
+    expect(sanitizeFilename("")).toBe("clip");
+    expect(sanitizeFilename("///")).toBe("clip");
   });
 });
 
