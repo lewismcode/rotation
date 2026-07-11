@@ -32,12 +32,20 @@ export function BatchFlow({
   const [stage, setStage] = useState<Stage>(confirmed ? "hooks" : "upload");
   const [openStep, setOpenStep] = useState<number>(0);
 
-  const refetch = useCallback(async () => {
-    const res = await fetch(`/api/batches/${detail.batch.id}`, {
-      cache: "no-store",
-    });
-    if (res.ok) setDetail(await res.json());
-  }, [detail.batch.id]);
+  const refetch = useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const res = await fetch(`/api/batches/${detail.batch.id}`, {
+          cache: "no-store",
+          signal,
+        });
+        if (res.ok) setDetail(await res.json());
+      } catch {
+        // aborted (unmount) or transient network error — ignore
+      }
+    },
+    [detail.batch.id]
+  );
 
   // Poll while anything is in flight: clips probing/uploading, or renders not
   // yet settled. Stops once everything is terminal.
@@ -55,10 +63,40 @@ export function BatchFlow({
   pollRef.current = shouldPoll;
   useEffect(() => {
     if (!shouldPoll) return;
-    const t = setInterval(() => {
-      if (pollRef.current) void refetch();
-    }, 2500);
-    return () => clearInterval(t);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const controller = new AbortController();
+    // Back off 2.5s → 10s so a long render doesn't hammer the API/DB, and
+    // pause entirely while the tab is hidden.
+    let delay = 2500;
+    const bump = () => (delay = Math.min(delay * 1.5, 10000));
+
+    const schedule = () => {
+      timer = setTimeout(run, delay);
+    };
+    const run = async () => {
+      if (cancelled || !pollRef.current) return;
+      if (!document.hidden) await refetch(controller.signal);
+      bump();
+      if (!cancelled && pollRef.current) schedule();
+    };
+    schedule();
+
+    // On returning to the tab, reset the cadence and refetch promptly.
+    const onVisible = () => {
+      if (!document.hidden && !cancelled && pollRef.current) {
+        delay = 2500;
+        void refetch(controller.signal);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      controller.abort();
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [shouldPoll, refetch]);
 
   // Derive the active step index from data + local pre-confirm stage.
